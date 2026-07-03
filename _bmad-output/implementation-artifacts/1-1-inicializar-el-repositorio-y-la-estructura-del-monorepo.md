@@ -227,7 +227,7 @@ Verification gate (2026-07-03), all green on branch `feat/1-inicializar-monorepo
 - [x] [Review][Patch] `.gitignore` `dist/` only ignores root-level — changed to `**/dist/` [.gitignore:2]
 - [x] [Review][Patch] Missing `.npmrc` with `engine-strict=true` — created [root/.npmrc]
 - [x] [Review][Patch] `package-lock.json` is untracked — will be committed alongside all other new files in this story [package-lock.json]
-- [x] [Review][Patch] Semver test regex too restrictive — extended to allow pre-release and build metadata tags [packages/shared/src/index.test.ts:10]
+- [x] [Review][Patch] Semver test regex too restrictive — extended to allow pre-release and build metadata tags, including hyphens in identifiers [packages/shared/src/index.test.ts:10]
 
 ### Deferred
 

@@ -8,6 +8,6 @@ describe('shared kernel', () => {
   });
 
   it('should expose a semver-shaped kernel version', () => {
-    expect(SHARED_KERNEL_VERSION).toMatch(/^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$/);
+    expect(SHARED_KERNEL_VERSION).toMatch(/^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$/);
   });
 });
