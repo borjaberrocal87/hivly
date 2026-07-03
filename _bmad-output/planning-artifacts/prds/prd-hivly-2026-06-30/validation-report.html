@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>PRD Validation: Hivly Self-Hosted</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --muted: #78716c;
+
+    --verdict-strong: #16a34a;
+    --verdict-adequate: #65a30d;
+    --verdict-thin: #d97706;
+    --verdict-broken: #dc2626;
+
+    --sev-low: #64748b;
+    --sev-medium: #ca8a04;
+    --sev-high: #ea580c;
+    --sev-critical: #dc2626;
+
+    --grade-exc: #16a34a;
+    --grade-good: #65a30d;
+    --grade-fair: #d97706;
+    --grade-poor: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  header.report-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .title h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .title .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .grade {
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 600;
+    color: white;
+    font-size: 15px;
+    white-space: nowrap;
+  }
+  .grade-excellent { background: var(--grade-exc); }
+  .grade-good { background: var(--grade-good); }
+  .grade-fair { background: var(--grade-fair); }
+  .grade-poor { background: var(--grade-poor); }
+
+  .synthesis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    font-size: 15.5px;
+  }
+  .synthesis p { margin: 0 0 10px; }
+  .synthesis p:last-child { margin-bottom: 0; }
+
+  .dimension-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .dim-card .dim-name { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .dim-card .dim-verdict { font-size: 14px; font-weight: 600; }
+
+  section.dimension, section.reviewer-section { margin-bottom: 14px; }
+  section.dimension details, section.reviewer-section details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  section summary {
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  section summary::-webkit-details-marker { display: none; }
+  section summary::before {
+    content: "▸";
+    display: inline-block;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  section details[open] summary::before { transform: rotate(90deg); }
+  section summary h2 {
+    display: inline;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    flex: 1;
+  }
+  .verdict-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: white;
+  }
+  .verdict-strong { background: var(--verdict-strong); }
+  .verdict-adequate { background: var(--verdict-adequate); }
+  .verdict-thin { background: var(--verdict-thin); }
+  .verdict-broken { background: var(--verdict-broken); }
+
+  .dim-body { padding: 4px 20px 18px; }
+  .dim-judgment { color: var(--text); font-size: 14.5px; }
+  .dim-judgment p { margin: 0 0 10px; }
+
+  .findings-list { padding: 0 20px 4px; }
+  article.finding {
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+  }
+  article.finding:first-child { border-top: none; }
+  article.finding header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .badge {
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+  .badge-sev-low { background: rgba(100, 116, 139, 0.12); color: var(--sev-low); }
+  .badge-sev-medium { background: rgba(202, 138, 4, 0.14); color: var(--sev-medium); }
+  .badge-sev-high { background: rgba(234, 88, 12, 0.14); color: var(--sev-high); }
+  .badge-sev-critical { background: rgba(220, 38, 38, 0.14); color: var(--sev-critical); }
+  .finding-title { margin: 0; font-size: 15px; font-weight: 500; flex: 1; min-width: 200px; }
+  .finding-location { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .finding-note, .finding-fix { margin-top: 6px; font-size: 14px; }
+  .finding-fix strong { color: var(--muted); font-weight: 500; }
+
+  .reviewer-source {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  .mechanical {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+  .mechanical h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .mechanical ul { margin: 0; padding-left: 20px; }
+  .mechanical li { margin-bottom: 4px; color: var(--text); }
+
+  footer.report-footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  footer .meta { display: flex; gap: 24px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="report-header">
+      <div class="title">
+        <h1>Hivly Self-Hosted — Validation Report</h1>
+        <div class="subtitle">docs/PRD.md</div>
+      </div>
+      <div class="grade grade-poor">Poor</div>
+    </header>
+
+    <div class="synthesis">
+      <p>Este PRD es técnicamente sólido a nivel de infraestructura — un ingeniero podría comenzar la implementación — pero falla como documento de decisión de producto: no tiene preguntas abiertas, no hay etiquetas de asunción, no hay marcado MVP/v1 por FR, y la persona principal (Miembro) carece de journeys documentados. Un PM no puede delimitar el MVP ni validar la tesis solo con este documento.</p>
+      <p>El revisor adversarial añade tres riesgos estructurales que elevan la calificación a Poor: las métricas de éxito son aspiracionales sin base de validación, el read tracking generará una explosión de datos a escala de comunidad no trivial, y el alcance del "MVP" es en realidad un producto completo de varios meses. La falta de comportamiento definido ante caídas del API del LLM es la omisión operacional más grave.</p>
+    </div>
+
+    <div class="dimension-summary">
+      <div class="dim-card">
+        <div class="dim-name">Decision-readiness</div>
+        <div class="dim-verdict" style="color: var(--verdict-thin)">Thin</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Substance over theater</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">Adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Strategic coherence</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">Adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Done-ness clarity</div>
+        <div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Scope honesty</div>
+        <div class="dim-verdict" style="color: var(--verdict-thin)">Thin</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Downstream usability</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">Adequate</div>
+      </div>
+      <div class="dim-card">
+        <div class="dim-name">Shape fit</div>
+        <div class="dim-verdict" style="color: var(--verdict-adequate)">Adequate</div>
+      </div>
+    </div>
+
+    <!-- 1. Decision-readiness -->
+    <section class="dimension">
+      <details open>
+        <summary>
+          <h2>1. Decision-readiness</h2>
+          <span class="verdict-pill verdict-thin">Thin</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>La tabla de Decisiones (§14, SD-1 a SD-15) es genuinamente útil y la lista de No-objetivos (§2.3) hace trabajo real. Sin embargo, el PRD lee como si ya hubiera resuelto todos los trade-offs en una dirección, sin alternativas surfaceadas ni reconocimiento honesto de costos.</p>
+            <p>No hay preguntas abiertas en ninguna parte del documento. Para una v1.0 de un producto AI self-hosted, esto es implausible. El roadmap (§15) separa MVP de v1 a nivel de fase, pero ningún FR o componente individual está etiquetado con su fase — SB-16, SB-17, SNF-13–17 aparecen como peers de primer nivel junto a componentes MVP aunque §15 los lista como v1.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">No hay preguntas abiertas documentadas</h3>
+              <span class="finding-location">§ todo el documento</span>
+            </header>
+            <div class="finding-note">Un producto AI self-hosted con cero preguntas abiertas es una señal de alerta. Comportamiento de recuperación ante errores, ruta de migración de datos, modo degradado ante caída del LLM — ninguno está surfaceado para decisión del PM.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir una tabla "Preguntas Abiertas" antes de §14 con al menos 5–8 ítems genuinos sin resolver, etiquetados por propietario y condición de revisión.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">Alcance MVP no trazable a FRs individuales</h3>
+              <span class="finding-location">§4, §11, §15</span>
+            </header>
+            <div class="finding-note">§15 lista el alcance MVP en prosa, pero SB-16, SB-17, SNF-13–17 (sync y RBAC — listados como v1 en §15) aparecen sin etiqueta de fase en §4 y §11, creando un límite de implementación incoherente.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir columna "Fase" a cada tabla de componentes y NFRs, o sufijo "(v1)" en cada fila fuera del alcance MVP.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Sin comportamiento de degradación/fallback especificado</h3>
+              <span class="finding-location">§4.2 Agent Runtime</span>
+            </header>
+            <div class="finding-note">El happy path del agent runtime está documentado, pero no se define qué devuelve el sistema cuando el LLM está caído, cuando pgvector retorna 0 resultados, o cuando Discord API rate-limita durante el backfill.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir subsección "Modos de fallo" en §4.2 y §4.1 con al menos: LLM-no-disponible, zero-retrieval, y Discord-rate-limit.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Default soft-delete no justificado como trade-off</h3>
+              <span class="finding-location">§4.6 config, SD-11</span>
+            </header>
+            <div class="finding-note">SD-11 explica las opciones pero no por qué soft es el default correcto. Un miembro podría recibir una cita apuntando a un mensaje borrado, violando directamente SO-3 ("fuentes verificables").</div>
+            <div class="finding-fix"><strong>Fix:</strong> Declarar en SD-11 el riesgo reconocido del default soft y quién posee la decisión de aceptarlo.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 2. Substance over theater -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>2. Substance over theater</h2>
+          <span class="verdict-pill verdict-adequate">Adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>La persona Operador impulsa directamente el flujo (§3.1), los specs de Docker Compose, el YAML de configuración y el checklist de despliegue — no es teatro. Los NFRs (§11) son por encima del promedio: tienen umbrales numéricos específicos y testables (SNF-1: &lt;200ms, SNF-2: &lt;5s, SNF-3: &lt;100ms primer chunk). La visión en §1 es específica a la categoría del producto.</p>
+            <p>La persona Admin del guild, sin embargo, no tiene requisitos trazables — no hay panel de admin ni endpoints específicos para Admin. La persona Miembro, el usuario final que genera el valor, tiene una descripción de una línea y ningún journey. Los SNF-6–9 (disponibilidad) son hechos de implementación, no requisitos.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Persona Admin del guild sin requisitos trazables</h3>
+              <span class="finding-location">§3, §2.3</span>
+            </header>
+            <div class="finding-note">"Configurar el bot, revisar métricas" no tiene endpoint, vista ni FR correspondiente. No hay endpoint de métricas de admin en §4.2 ni vista admin en §4.3.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Eliminar la persona Admin (colapsando sus necesidades en Operador) o añadir un flujo Admin concreto (ej., endpoint <code>/api/admin/metrics</code> + vista AdminMetrics).</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Persona Miembro sin user journey</h3>
+              <span class="finding-location">§3</span>
+            </header>
+            <div class="finding-note">El usuario final del sistema tiene descripción de una línea y ningún flujo. §4.8 documenta los eventos del sistema de read tracking, no la experiencia del miembro al buscar, leer y chatear.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir "Flujo del miembro" paralelo a §3.1, mínimo 5–6 pasos cubriendo: login, búsqueda, abrir documento, chat, marcar como leído.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">SNF-6–9 son hechos de implementación, no requisitos</h3>
+              <span class="finding-location">§11.2</span>
+            </header>
+            <div class="finding-note">"Health check en /health" describe implementación. El requisito debería ser el outcome observable: "El sistema debe retornar respuesta no-2xx en N segundos cuando cualquier componente esté degradado."</div>
+            <div class="finding-fix"><strong>Fix:</strong> Reescribir SNF-6 a SNF-9 como outcomes observables con umbrales.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 3. Strategic coherence -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>3. Strategic coherence</h2>
+          <span class="verdict-pill verdict-adequate">Adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>La tesis es clara: el conocimiento de comunidades Discord está fragmentado; AI self-hosted permite capturarlo y servirlo manteniendo los datos bajo control. Los objetivos SO (§2.2) mapean a esta tesis y los componentes (§4) los implementan. El ángulo de soberanía de datos (SO-7) es el diferenciador principal del producto frente a alternativas SaaS.</p>
+            <p>Sin embargo, SO-7 "Datos bajo control" está contradicho por el uso del API del LLM: el contenido de mensajes de miembros sale del servidor del operador hacia Anthropic/OpenAI para embeddings e inferencia, y esto no se reconoce nunca como tensión con SO-7. SM-3/SM-4 duplican exactamente SNF-1/SNF-2 — son targets de ingeniería reempaquetados como métricas de éxito. No hay counter-metrics nombradas en ninguna parte.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">SO-7 "Datos bajo control" contradicho por uso del API LLM</h3>
+              <span class="finding-location">§2.2, §4.2, §13</span>
+            </header>
+            <div class="finding-note">El sistema envía contenido de mensajes de miembros a APIs de Anthropic/OpenAI para embeddings (<code>text-embedding-3-small</code>) e inferencia. Nunca se reconoce como tensión con la promesa de self-hosted.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir nota a SO-7 aclarando que "bajo control" se refiere a datos en reposo, y reconocer el procesamiento del proveedor LLM en §13 Threat Model.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">SM-3/SM-4 duplican targets NFR y no son métricas de producto</h3>
+              <span class="finding-location">§16</span>
+            </header>
+            <div class="finding-note">SM-3 = SNF-1 (búsqueda vectorial P95 &lt;200ms); SM-4 = SNF-2 (agente P95 &lt;5s). Las métricas de éxito deben medir outcomes de producto, no compliance de ingeniería.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Reemplazar SM-3/SM-4 con métricas de outcome como "% de sesiones de miembros que resultan en una respuesta encontrada."</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Sin counter-metrics nombradas</h3>
+              <span class="finding-location">§16</span>
+            </header>
+            <div class="finding-note">El modo de fallo de SM-1 (respuestas malas, alucinaciones) y SM-2 (citas que apuntan a contenido borrado/incorrecto) no tienen señales de fallo nombradas. Sin counter-metrics no hay señal de fallo en producción.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir columna de counter-metric o nota a SM-1 y SM-2 nombrando el indicador de fallo (ej., "% de respuestas seguidas por la misma pregunta en 5 min").</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">SM-5 es métrica de ingeniería en tabla de éxito de producto</h3>
+              <span class="finding-location">§16</span>
+            </header>
+            <div class="finding-note">Cobertura de tests &gt;80% pertenece a §11.3 como SNF-10, no a la tabla de métricas de éxito del producto.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Mover SM-5 exclusivamente a §11.3; eliminar de §16.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 4. Done-ness clarity -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>4. Done-ness clarity</h2>
+          <span class="verdict-pill verdict-strong">Strong</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Esta es la dimensión más fuerte del PRD. Los componentes (§4) tienen nombres específicos que mapean a la estructura del repo (§6.3). Los esquemas SQL (§5.2) son completos e incluyen constraints. Los endpoints API (§4.2) especifican método, ruta y descripción. Los diagramas de flujo de indexación (§4.1) detallan cada nombre de evento. Los umbrales NFR son numéricos y testables. Un ingeniero podría proceder a implementación sin ambigüedad significativa.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Manejo de attachments y embeds es implícito</h3>
+              <span class="finding-location">§4.1 MessageIndexer, §5.2</span>
+            </header>
+            <div class="finding-note">Las columnas <code>attachments</code> y <code>embeds</code> son JSONB en el esquema, pero ningún FR especifica qué hace el sistema con los attachments (¿indexa el contenido de texto? ¿omite? ¿descarga imágenes?).</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir una frase en §4.1 MessageIndexer describiendo el manejo de attachments, o declarar no-goal explícito en §2.3.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Tool sandboxing especificado pero no definido</h3>
+              <span class="finding-location">§9 SS-5, §4.2</span>
+            </header>
+            <div class="finding-note">"Ejecución aislada; permisos" y "Ejecutar tool en sandbox" aparecen sin definición de qué significa sandbox (¿subprocess isolation? ¿sin acceso a filesystem? ¿restricciones de red?).</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir 2–3 líneas definiendo el scope del sandbox en §9, o referenciar una decisión SD-X.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title"><code>grouping_window: 10</code> sin unidad</h3>
+              <span class="finding-location">§4.6 config</span>
+            </header>
+            <div class="finding-note">¿10 mensajes? ¿10 segundos? ¿10 minutos? La unidad no está especificada.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Clarificar en el schema de configuración o un comentario YAML.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title"><code>memory: 2G</code> en docker-compose.prod.yml sin justificación</h3>
+              <span class="finding-location">§7.2</span>
+            </header>
+            <div class="finding-note">Los NFRs no indican targets de memoria. El límite de 2G no tiene base documentada.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir entrada SNF para huella de memoria, o añadir comentario explicando la cifra de 2G.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 5. Scope honesty -->
+    <section class="dimension">
+      <details open>
+        <summary>
+          <h2>5. Scope honesty</h2>
+          <span class="verdict-pill verdict-thin">Thin</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>La sección §2.3 de No-objetivos existe y hace trabajo real — nombra seis exclusiones específicas. Esto es positivo. Sin embargo, no hay etiquetas [ASSUMPTION] en ninguna parte del documento. Al menos cuatro asunciones son load-bearing: que el operador tiene un dominio público para los redirect URIs de Discord OAuth2; que los costos de embedding son negligibles a las escalas de comunidad objetivo; que el rate limit de Discord API es suficiente para el backfill en `backfill_limit: 1000`; que `text-embedding-3-small` a 1536 dimensiones es adecuado para la calidad de búsqueda semántica a escala de comunidad.</p>
+            <p>No hay callouts [NOTE FOR PM]. El roadmap (§15) difiere decisiones a fases sin marcar cuáles requieren una decisión PM antes de comenzar la implementación.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">Sin asunciones etiquetadas</h3>
+              <span class="finding-location">§ todo el documento</span>
+            </header>
+            <div class="finding-note">Al menos cuatro asunciones load-bearing existen (OAuth redirect URL, modelo de costo de embedding, adecuación del rate limit de Discord, calidad de umbral de embedding) que podrían invalidar el alcance si son incorrectas.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir §0.1 Tabla de Asunciones con etiquetas [ASSUMPTION] y plan de validación por propietario para cada una.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Límites de fase del roadmap sin criterios de decisión</h3>
+              <span class="finding-location">§15</span>
+            </header>
+            <div class="finding-note">Los ítems "v1" están listados pero no hay criterio para cuándo se considera completo el MVP y comienza v1. Sin definición de salida del MVP, el límite es sin sentido para un PM.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir 1–2 criterios objetivos por transición de fase (ej., "MVP completo cuando SM-1 &gt;70% en 3 comunidades activas en producción durante 30 días").</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Distinción Operador vs Admin subdesarrollada</h3>
+              <span class="finding-location">§3</span>
+            </header>
+            <div class="finding-note">El PRD asume que el operador y el Admin de Discord son la misma persona, pero no tienen por qué serlo. Si son diferentes, el Admin no tiene ruta de acceso a Hivly (sin endpoints de admin, sin login).</div>
+            <div class="finding-fix"><strong>Fix:</strong> Declarar explícitamente si Operador = Admin es una restricción requerida o una asunción.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">"Lista de canales a excluir" en §13 no está en §4.6</h3>
+              <span class="finding-location">§13, §4.6</span>
+            </header>
+            <div class="finding-note">El Threat Model menciona una lista de exclusión de canales pero el YAML de configuración en §4.6 usa <code>enabled: false</code> como mecanismo. Ambigüedad en el modelo de amenaza.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Aclarar en §13 que <code>enabled: false</code> es el mecanismo de exclusión.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 6. Downstream usability -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>6. Downstream usability</h2>
+          <span class="verdict-pill verdict-adequate">Adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>La estructura del repo (§6.3) es suficientemente detallada para que un arquitecto comience el scaffolding. Los endpoints API (§4.2) son concretos para que un frontend los stub. Los esquemas SQL (§5.2) son listos para implementación. Los archivos Docker Compose (§7) son deployables tal como están.</p>
+            <p>Sin embargo, no hay Glosario. "documento," "fragmento," "embedding," y "chunk" se usan con cierta intercambiabilidad para el mismo concepto de unidad de conocimiento indexado. "Embedding" aparece como identificador de cara al usuario en la API de read tracking (<code>/api/read-status/:embeddingId</code>) — expone un detalle de implementación como identificador de usuario. Los IDs de componentes (SB-1 a SB-17) cruzan tres componentes distintos en un único namespace sin mapeo visible.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">"Embedding" expuesto como identificador de cara al usuario en la API</h3>
+              <span class="finding-location">§4.2, §4.8</span>
+            </header>
+            <div class="finding-note"><code>/api/read-status/:embeddingId</code> y el flujo de read tracking referencian "embedding" como concepto clave para los miembros. Un embedding es un concepto de infraestructura; la entidad de cara al usuario debería ser "fragmento" o "documento indexado."</div>
+            <div class="finding-fix"><strong>Fix:</strong> Introducir término de cara al usuario ("fragmento", "documento indexado") en el Glosario, mapearlo a la entidad DB, y renombrar la ruta API o añadir nota explicando su naturaleza interna.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Sin sección de Glosario</h3>
+              <span class="finding-location">§ todo el documento</span>
+            </header>
+            <div class="finding-note">"documento," "fragmento," "mensaje," "embedding," "chunk" sin definición canónica. Causará drift de terminología en copy UX, respuestas API y codebase.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir §0.2 Glosario con al menos: Operador, Admin, Miembro, Mensaje (Discord message), Fragmento (indexed chunk), Conversación, Guild, Embedding.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Namespace de IDs cruza múltiples componentes sin mapeo</h3>
+              <span class="finding-location">§4.1, §4.2, §4.3</span>
+            </header>
+            <div class="finding-note">SB-1 a SB-17 mezcla Discord Bot, Backend y Web App en un único namespace. La creación de stories desde este PRD requiere que el autor conozca el mapeo de memoria.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Prefijar IDs por componente: <code>BOT-1</code> a <code>BOT-7</code> para Discord Bot, <code>API-1</code> a <code>API-5</code> para Backend, <code>UI-1</code> a <code>UI-5</code> para Web App.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">Sin user journeys con protagonistas nombrados</h3>
+              <span class="finding-location">§3</span>
+            </header>
+            <div class="finding-note">Solo el Operador tiene un flujo (§3.1). El trabajo de UX y creación de stories para features de Miembro no puede source-extract de este PRD.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir §3.2 Flujo del miembro con protagonista nombrado (ej., "Ana, moderadora técnica de una comunidad de developers") cubriendo el loop búsqueda/chat/read-tracking.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- 7. Shape fit -->
+    <section class="dimension">
+      <details>
+        <summary>
+          <h2>7. Shape fit</h2>
+          <span class="verdict-pill verdict-adequate">Adequate</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>Es un producto técnico centrado en el operador y el PRD está correctamente formado para eso: el flujo del operador (§3.1), configuración-como-código (§4.6), Docker Compose (§7), checklist de despliegue (§17) y Threat Model (§13) son artefactos apropiados para este tipo de producto.</p>
+            <p>El estiramiento de forma: la capa de interacción del miembro está casi ausente. Para un producto cuya propuesta de valor se entrega a los miembros (quienes buscan, chatean y leen), el PRD tiene aproximadamente 15 líneas sobre comportamiento de cara al miembro versus cientos de líneas de especificación de infraestructura. El estado "En revisión" es apropiado — este documento lee como borrador de primer autor que no ha sido revisado por PM, UX designer, ni segundo revisor técnico.</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Comportamiento de cara al miembro vastamente sub-especificado respecto a infraestructura</h3>
+              <span class="finding-location">§3, §4.3, §4.8</span>
+            </header>
+            <div class="finding-note">La Web App (§4.3) lista cinco componentes y cuatro vistas en una tabla sin detalle de interacción, empty states, error states, ni loading states. Para un PRD de producto, la capa de interfaz de la persona principal debería tener al menos un flujo de interacción.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir §4.3.1 con el journey miembro de búsqueda-a-respuesta al nivel de interacción UI (no al nivel de evento de sistema), o referenciar un spec UX separado.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">Typo en §4.2 — "ENsamBLAR CONTEXTO"</h3>
+              <span class="finding-location">§4.2</span>
+            </header>
+            <div class="finding-note">Casing mixto en header de sección — señala que el documento no ha sido revisado.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Corregir a "ENSAMBLAR CONTEXTO".</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">Docker Compose <code>version: '3.8'</code> es sintaxis deprecada</h3>
+              <span class="finding-location">§7.1, §7.2</span>
+            </header>
+            <div class="finding-note">Docker Compose v2 ignora la clave <code>version</code> y puede causar warnings en linters.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Eliminar la clave <code>version:</code> de ambos compose files.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <!-- Adversarial review section -->
+    <section class="reviewer-section">
+      <details open>
+        <summary>
+          <h2>Revisión adversarial</h2>
+          <span class="reviewer-source">review-adversarial.md</span>
+        </summary>
+        <div class="dim-body">
+          <div class="dim-judgment">
+            <p>El PRD es arquitectónicamente coherente para un proyecto de portfolio individual, pero conflate "bien especificado" con "bien pensado": las métricas de éxito son números inventados sin base de validación, el alcance del MVP es drásticamente mayor que un MVP real, y el read tracking es una bomba de tiempo de datos a cualquier tamaño de comunidad no trivial. El mayor riesgo es que el equipo entregue un stack Docker Compose que nadie puede realistamente desplegar y mantener sin experiencia DevOps, contradiciendo directamente la promesa de "despliegue trivial."</p>
+          </div>
+        </div>
+        <div class="findings-list">
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-critical">Critical</span>
+              <h3 class="finding-title">Métricas de éxito son aspiracionales sin base de validación</h3>
+              <span class="finding-location">§16 Métricas de éxito</span>
+            </header>
+            <div class="finding-note">SM-1 (&gt;70% preguntas resueltas sin intervención humana) y SM-2 (&gt;95% respuestas con fuente citada) son presentadas como targets sin baseline previo, investigación de usuarios, ni benchmark. Los sistemas RAG sobre datos reales de comunidad routinamente fallan en encontrar chunks relevantes para preguntas ambiguas o jerga específica. SM-7 (&gt;60% documentos marcados como leídos) asume un comportamiento de seguimiento de lectura voluntario sin precedente en la cultura Discord.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Reemplazar targets duros con proxies instrumentados medibles al lanzamiento, y etiquetar explícitamente todos los SM targets como "aspiracionales — a validar en beta."</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-critical">Critical</span>
+              <h3 class="finding-title">Read tracking generará explosión de datos a escala de comunidad</h3>
+              <span class="finding-location">§4.8, §5.2</span>
+            </header>
+            <div class="finding-note"><code>user_read_status</code> almacena una fila por par (usuario, embedding). Una comunidad con 500 miembros activos y 50.000 embeddings (fácilmente alcanzable con backfill y indexación continua) produce 25.000.000 filas en una sola tabla. El endpoint <code>mark-all</code> necesita insertar potencialmente 100.000 filas en una sola transacción. No hay límite de batch, paginación, ni upper bound especificado.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Definir el tamaño máximo de comunidad para el que está diseñada esta feature. Considerar un enfoque de bitset o modelo inverso "no-leído desde timestamp" en lugar de acknowledgment positivo por embedding.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-critical">Critical</span>
+              <h3 class="finding-title">MVP no es realmente un MVP</h3>
+              <span class="finding-location">§15 Hoja de ruta</span>
+            </header>
+            <div class="finding-note">El alcance MVP listado incluye: Discord bot + backfiller + sync, web search UI, chat con RAG, read tracking, YAML config, notificaciones Telegram/Slack, empaquetado Docker Compose, y "tests básicos." Es un esfuerzo de ingeniería de varios meses para un developer individual. Más críticamente, RBAC y sync de ediciones/borrados están listados como v1 en §15, pero el spec del sistema (SB-16, SB-17, SS-9) los especifica como componentes requeridos — creando contradicción en cada PR.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Definir MVP como el artefacto deployable más pequeño donde el valor es demostrable: bot indexa + chat con citas. Mover read tracking y RBAC a v1. Hacer el límite MVP/v1 explícito en cada sección que lo referencia.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-critical">Critical</span>
+              <h3 class="finding-title">Caída del API LLM no manejada</h3>
+              <span class="finding-location">§4.2, §11.2</span>
+            </header>
+            <div class="finding-note">El agent runtime llama un API LLM externo. Si ese API cae, el endpoint de chat presumiblemente falla. El PRD especifica graceful shutdown (SNF-8) y restart on failure (SNF-7), pero ninguno cubre el escenario de un pod saludable con LLM upstream no disponible. No hay circuit breaker definido, ni fallback en modo degradado, ni contrato de error de cara al usuario.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Definir comportamiento de fallo explícito para no-disponibilidad del LLM: al mínimo, retornar error visible al usuario con guía de retry, surfacear estado del API LLM en <code>/health</code>, y documentar el comportamiento en modo degradado.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">Caída del Discord Gateway rompe la indexación en tiempo real silenciosamente</h3>
+              <span class="finding-location">§4.1, §13</span>
+            </header>
+            <div class="finding-note">Si el bot se desconecta, los mensajes se pierden silenciosamente. El "Sync on start" solo funciona si el operador nota que el bot está caído y lo reinicia. Si el bot está caído 48 horas en un guild activo, el gap de backfill puede superar <code>backfill_limit</code>, creando puntos ciegos permanentes.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Especificar el algoritmo de reconciliación: almacenar el último snowflake de mensaje Discord visto por canal, y hacer backfill desde ese punto en lugar de un conteo fijo. Definir una alerta de monitoreo cuando el bot no haya recibido ningún evento en N minutos.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">Staleness de cache RBAC crea ventana de seguridad</h3>
+              <span class="finding-location">§4.6, §9 SS-9, SD-14</span>
+            </header>
+            <div class="finding-note">Si un admin de Discord revoca un rol a un usuario (ej., degradando un mod activo), ese usuario retiene acceso a canales restringidos hasta 5 minutos. En un escenario disciplinario esto es un problema real. El Threat Model lista esta amenaza como mitigada, pero la mitigación es incompleta.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir endpoint de invalidación de cache (solo admin) para forzar refresh de roles de un usuario. Documentar el trade-off de seguridad explícitamente: "TTL por debajo de 60s causará presión de rate limit en Discord API."</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">Sin estrategia de backup o recuperación especificada</h3>
+              <span class="finding-location">§12 Despliegue, §17 Checklist</span>
+            </header>
+            <div class="finding-note">El checklist menciona "Backup de base de datos programado" como checkbox post-despliegue, pero el PRD no especifica: frecuencia de backup, política de retención, procedimiento de restore, o qué ocurre con <code>user_read_status</code> después de un restore. Para un producto self-hosted, el operador es responsable — y el PRD no da orientación.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir sección definiendo el contrato mínimo de backup: <code>pg_dump</code> diario, cadencia de snapshot de volumen, y procedimiento de restore documentado. Hacer la configuración de backup parte de <code>Hivly.config.yml</code>.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">Historial de conversación "summary memory" sin especificar</h3>
+              <span class="finding-location">§4.2 Agent Runtime</span>
+            </header>
+            <div class="finding-note">El agente usa "Historial de conversación (summary memory)" pero el PRD nunca define: qué estrategia de resumen se usa, cuántos turnos previos se guardan antes de resumir, cuál es el presupuesto máximo de context window, ni cómo se almacena el resumen. Es el mecanismo más probable de producir UX degradado.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Especificar la estrategia de memoria concretamente: rolling window de últimos N mensajes, o ConversationSummaryBufferMemory con presupuestos de tokens explícitos. Vincular al límite de context window del LLM configurado.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-high">High</span>
+              <h3 class="finding-title">Tool <code>search_web</code> con <code>permission: auto</code> es una responsabilidad</h3>
+              <span class="finding-location">§4.6 config example</span>
+            </header>
+            <div class="finding-note">La config de ejemplo habilita <code>search_web</code> con <code>permission: "auto"</code>, permitiendo al agente invocar búsqueda web sin confirmación del usuario. No está en los No-objetivos, introduce dependencias externas (proveedor de búsqueda no nombrado), costo impredecible, y riesgo de que el agente cite fuentes externas que contradicen el conocimiento de la comunidad.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Mover <code>search_web</code> a la fase "Posterior" del roadmap. Si se mantiene, nombrar el proveedor, definir controles de costo, y cambiar el default a <code>permission: "ask"</code>.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Estrategia de chunking arbitraria, sin optimización para Discord</h3>
+              <span class="finding-location">§4.6 knowledge config</span>
+            </header>
+            <div class="finding-note"><code>chunk_size: 500</code> es el default de LangChain, no una elección optimizada para Discord. Los mensajes cortos conversacionales (mayoría del contenido Discord) serán sobre-fragmentados. La interacción entre <code>grouping_window: 10</code> y <code>chunk_size</code> no está especificada: ¿el agrupamiento ocurre antes o después del chunking?</div>
+            <div class="finding-fix"><strong>Fix:</strong> Especificar el pipeline agrupamiento-luego-chunking explícitamente. Definir conteo mínimo de caracteres por grupo. Declarar estos como defaults a afinar post-MVP.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Soft-delete crea citas desactualizadas</h3>
+              <span class="finding-location">§4.1 step 7, §4.6</span>
+            </header>
+            <div class="finding-note">Con la política de borrado soft por defecto, los embeddings de mensajes borrados permanecen consultables en pgvector. El PRD no especifica si la cadena de recuperación filtra embeddings soft-deleted de los resultados de búsqueda.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Requerir explícitamente que la query de búsqueda/recuperación siempre filtre <code>WHERE deleted_at IS NULL</code> en el join con <code>discord_messages</code>.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">OAuth2 redirect URI no especificado — fricción de despliegue</h3>
+              <span class="finding-location">§4.7 Autenticación</span>
+            </header>
+            <div class="finding-note">Discord OAuth2 requiere whitelisting del redirect URI. Cada operador self-hosted corre en un dominio/IP/puerto diferente. El PRD nunca aborda cómo los operadores configuran esto, si el desarrollo localhost funciona out-of-the-box, o si la callback URL es configurable vía <code>.env</code>. Es el punto de fricción más común en la primera hora de instalación.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Añadir <code>DISCORD_REDIRECT_URI</code> a <code>.env.example</code> y documentar el paso de configuración del dashboard de aplicación Discord explícitamente en la guía de despliegue.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-medium">Medium</span>
+              <h3 class="finding-title">Redis en producción podría evictar eventos de indexación silenciosamente</h3>
+              <span class="finding-location">§7.2, §4.5</span>
+            </header>
+            <div class="finding-note">El límite de memoria de Redis en prod (256M) significa que Redis podría comenzar a evictar entradas de stream. El PRD no especifica la política de evicción Redis ni qué ocurre con eventos descartados del stream.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Establecer <code>maxmemory-policy noeviction</code> para el Redis de cola de eventos y documentar monitoreo de stream lag. Definir proyecciones de uso de disco para las configuraciones recomendadas.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">docker-compose.yml expone PostgreSQL en 0.0.0.0:5432 en dev</h3>
+              <span class="finding-location">§7.1</span>
+            </header>
+            <div class="finding-note">El compose file de desarrollo enlaza Postgres a todas las interfaces, no a <code>127.0.0.1:5432</code>. En una VM cloud o host compartido, esto expone la base de datos a redes externas.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Enlazar a <code>127.0.0.1:5432:5432</code> en el compose file de dev. Añadir nota de configuración de firewall a la guía de despliegue.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title">Interpolación <code>${ENV_VAR}</code> en YAML sin especificar el parser</h3>
+              <span class="finding-location">§4.6</span>
+            </header>
+            <div class="finding-note">El YAML de configuración referencia <code>"${DISCORD_GUILD_ID}"</code>. YAML no soporta natively la sustitución de variables de entorno — requiere Docker Compose interpolation, un loader custom, o una librería. El PRD no especifica cuál mecanismo maneja esto.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Especificar en §4.6 que <code>loader.ts</code> resuelve patrones <code>${VAR}</code> contra <code>process.env</code> al startup, y que <code>.env</code> se carga antes de que corra el parser YAML.</div>
+          </article>
+          <article class="finding">
+            <header>
+              <span class="badge badge-sev-low">Low</span>
+              <h3 class="finding-title"><code>backfill_limit: 1000</code> tiene unidad ambigua</h3>
+              <span class="finding-location">§4.6 config</span>
+            </header>
+            <div class="finding-note">¿1000 mensajes, 1000 páginas API (50 msgs cada una), o 1000 embeddings? Con 20 canales habilitados y 10 páginas por canal, el bot ejecuta 200 llamadas API al arrancar — potencialmente disparando el rate limit global de Discord.</div>
+            <div class="finding-fix"><strong>Fix:</strong> Documentar la unidad explícitamente (mensajes, no páginas), especificar el delay entre requests durante backfill, y añadir recomendación para guilds grandes de habilitar backfill en horario escalonado.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <div class="mechanical">
+      <h3>Notas mecánicas</h3>
+      <ul>
+        <li><strong>Drift de glosario</strong> — "fragmento" (§2.3, §4.8), "documento" (§4.3, §16), "embedding" (§4.2, §4.8, §5.1), "chunk" (§4.6 <code>chunk_size</code>) refieren al mismo concepto indexado en distintos niveles de abstracción. Sin término canónico establecido.</li>
+        <li><strong>IDs no-continuos</strong> — SB-1 a SB-17 cruza tres componentes (Discord Bot: SB-1–5, SB-16/17; Backend: SB-6–10; Web App: SB-11–15) en un único namespace sin mapeo visible. SS-1–9 y SNF-1–17 son namespaces separados que podrían colisionar sin prefijo.</li>
+        <li><strong>SNF no-continuo</strong> — SNF-6–9 (disponibilidad) aparecen en §11.2 después de SNF-1–5 (performance) en §11.1, luego SNF-10–12 (testing) en §11.3, luego SNF-13–17 vuelven a §11.1. La numeración no sigue el orden de sección.</li>
+        <li><strong>Gap de cross-reference</strong> — §13 Threat Model menciona "Lista de canales a excluir" pero no existe tal lista en §4.6; el mecanismo es <code>enabled: false</code> por canal.</li>
+        <li><strong>Duplicación SM/NFR</strong> — SM-3 = SNF-1 (búsqueda vectorial P95 &lt;200ms); SM-4 = SNF-2 (agente P95 &lt;5s); SM-5 = SNF-10 (cobertura &gt;80%). Listados en dos secciones sin cross-reference.</li>
+        <li><strong>docker-compose.prod.yml</strong> — <code>DISCORD_CLIENT_SECRET</code> aparece tanto en el bloque <code>environment:</code> como en <code>secrets:</code>. La variable de entorno tomaría precedencia sobre el montaje del secret, haciendo la declaración del secret redundante.</li>
+        <li><strong>Typo</strong> — §4.2 "ENsamBLAR CONTEXTO" — casing mixto en header de sección.</li>
+      </ul>
+    </div>
+
+    <footer class="report-footer">
+      <div class="meta">
+        <span>Rubric: .claude/skills/bmad-prd/assets/prd-validation-checklist.md</span>
+        <span>PRD: docs/PRD.md</span>
+        <span>Generated: 2026-06-30T00:00:00Z</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

@@ -1,0 +1,260 @@
+# Hivly — API specification (OpenAPI 3.1)
+#
+# PLACEHOLDER / SCAFFOLD. This is the human-readable authoritative list of REST
+# + SSE endpoints. The runtime source of truth for request/response shapes is
+# the Zod schemas in `packages/shared/src/schemas/` — keep this file in sync
+# with them (update it whenever an endpoint or schema changes; see
+# documentation-standards.md). See TECHNICAL-DESIGN.md §11 for the design.
+
+openapi: "3.1.0"
+info:
+  title: Hivly API
+  version: "0.1.0"
+  description: >
+    Self-hosted AI agent over a Discord community's knowledge. REST for
+    CRUD/search; `POST /api/chat` streams answers via Server-Sent Events (AD-4).
+    Every `/api/*` route requires a valid Redis session except `/api/auth/*`
+    and `/health`.
+
+servers:
+  - url: /
+    description: Behind nginx (single entry point in production)
+
+tags:
+  - name: auth
+  - name: search
+  - name: documents
+  - name: chat
+  - name: conversations
+  - name: read-status
+  - name: admin
+  - name: system
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Liveness/readiness probe (no auth)
+      security: []
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { type: string, example: ok } } }
+
+  /api/auth/login:
+    get:
+      tags: [auth]
+      summary: Start Discord OAuth2 login (identify, guilds.members.read)
+      security: []
+      responses:
+        "302": { description: Redirect to Discord authorize URL }
+
+  /api/auth/callback:
+    get:
+      tags: [auth]
+      summary: OAuth2 callback — verify guild membership, create Redis session
+      security: []
+      parameters:
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+      responses:
+        "302": { description: Redirect to the SPA with session cookie set }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke the session (delete the Redis key)
+      responses:
+        "204": { description: Session destroyed }
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Current session identity
+      responses:
+        "200":
+          description: Session user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  userId: { type: string }
+                  discordRoles: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/auth/roles:
+    get:
+      tags: [auth]
+      summary: Roles resolved for the current user
+      responses:
+        "200": { description: Role list }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/search:
+    get:
+      tags: [search]
+      summary: Vector search over indexed knowledge (RBAC-scoped)
+      description: >
+        Results are filtered by the caller's allowedChannelIds inside the vector
+        query (not a post-filter). Never returns fragments outside RBAC scope.
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 5 } }
+      responses:
+        "200": { description: Ranked fragments with source metadata }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/documents:
+    get:
+      tags: [documents]
+      summary: List/browse indexed documents visible to the caller
+      responses:
+        "200": { description: Documents (RBAC-scoped) }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/chat:
+    post:
+      tags: [chat]
+      summary: Ask the agent — streams the answer over SSE (AD-4)
+      description: >
+        Client uses fetch streaming (not EventSource) to POST a body. nginx MUST
+        disable buffering on this route (AD-7) so frames arrive incrementally.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string }
+                conversationId: { type: string, nullable: true }
+      responses:
+        "200":
+          description: SSE stream of SSEFrame events (token → citation → done)
+          content:
+            text/event-stream:
+              schema: { $ref: "#/components/schemas/SSEFrame" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/conversations:
+    get:
+      tags: [conversations]
+      summary: List the caller's conversations
+      responses:
+        "200": { description: Conversation list }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/conversations/{conversationId}:
+    get:
+      tags: [conversations]
+      summary: Fetch a single conversation with its messages
+      parameters:
+        - { name: conversationId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Conversation with messages }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/read-status/unread-count:
+    get:
+      tags: [read-status]
+      summary: Unread fragment count for the caller (RBAC-scoped)
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema: { type: object, properties: { unread: { type: integer } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/read-status/mark-all:
+    post:
+      tags: [read-status]
+      summary: Mark all visible fragments as read
+      responses:
+        "200": { description: Updated read counts }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/admin/roles/invalidate:
+    post:
+      tags: [admin]
+      summary: Invalidate the cached role expansion (admin only)
+      responses:
+        "204": { description: Cache invalidated }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: connect.sid
+      description: httpOnly cookie holding only the Redis session ID (AD-10)
+
+  security:
+    - sessionCookie: []
+
+  schemas:
+    Error:
+      type: object
+      description: Unified error shape from @hivly/shared/schemas/errors.ts
+      required: [error, code]
+      properties:
+        error: { type: string, example: Unauthorized }
+        code: { type: string, example: AUTH_REQUIRED }
+
+    SSEFrame:
+      description: Frame schema from packages/shared/src/schemas/sse.ts
+      oneOf:
+        - type: object
+          properties:
+            type: { const: token }
+            content: { type: string }
+        - type: object
+          properties:
+            type: { const: citation }
+            channel: { type: string }
+            author: { type: string }
+            date: { type: string }
+        - type: object
+          properties:
+            type: { const: done }
+            conversationId: { type: string }
+        - type: object
+          properties:
+            type: { const: error }
+            code: { type: string }
+            message: { type: string }
+
+  responses:
+    BadRequest:
+      description: Validation error (Zod parse failure → 400/422)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid session
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated but not permitted (RBAC)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+security:
+  - sessionCookie: []

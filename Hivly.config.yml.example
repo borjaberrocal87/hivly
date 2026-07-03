@@ -1,0 +1,79 @@
+# Hivly — behavior configuration (example)
+#
+# Copy to `Hivly.config.yml` and edit with real values:
+#   cp Hivly.config.yml.example Hivly.config.yml
+#
+# This file holds BEHAVIOR only (channels, models, RBAC, knowledge tuning,
+# rate limits). Secrets (tokens, API keys, DB/Redis URLs) live ONLY in `.env`
+# and are referenced here as ${ENV_VAR}. Never mix the two (AD Consistency
+# Conventions). Validated by `loadConfig()` in `@hivly/shared`; the service
+# aborts on invalid/missing keys before opening any connection.
+
+version: "1.0"
+
+# --- Discord ingestion --------------------------------------------------------
+discord:
+  guild_id: "${DISCORD_GUILD_ID}"
+  channels:
+    - id: "1234567890"
+      name: "general"
+      enabled: true
+    - id: "1234567891"
+      name: "support"
+      enabled: true
+  backfill:
+    enabled: true       # index historical messages on first run
+    limit: 1000         # max messages to backfill per channel
+    ignore_bots: true
+
+# --- RAG agent (LangGraph) ----------------------------------------------------
+agent:
+  provider: "anthropic"
+  model: "claude-sonnet-4-6"
+  temperature: 0.7
+  max_iterations: 10
+  memory_window: 20     # conversation turns kept before summarization
+
+# --- Knowledge / ingestion tuning --------------------------------------------
+knowledge:
+  chunk_size: 500
+  chunk_overlap: 50
+  grouping_window: 10   # consecutive same-channel messages grouped before chunking
+  embedding_model: "text-embedding-3-small"  # 1536-dim vectors
+
+# --- Sync (edits/deletes from Discord) ---------------------------------------
+sync:
+  enabled: true
+  sync_on_start: true
+  delete_policy: "soft" # "soft" (deleted_at) | "hard" (DELETE row)
+
+# --- Access control / RBAC ----------------------------------------------------
+# channel_permissions is materialized into the `channel_permissions` table at
+# Backend startup; allowedChannelIds is expanded per request (AD-12), so changes
+# here take effect on the user's next request after a restart.
+access_control:
+  enabled: true
+  default_policy: "deny"
+  role_cache_ttl: 300   # seconds (user_roles_cache TTL)
+  channel_permissions:
+    - channel_id: "1234567890"
+      name: "general"
+      allowed_roles: ["admin", "mod", "member"]
+
+# --- Read tracking ------------------------------------------------------------
+read_tracking:
+  enabled: true
+  auto_mark_read_on_click: true
+
+# --- Observability ------------------------------------------------------------
+observability:
+  sentry_dsn: "${SENTRY_DSN}"
+  log_level: "info"     # debug | info | warn | error
+
+# --- Security -----------------------------------------------------------------
+security:
+  rate_limit:
+    window_ms: 60000
+    max_requests: 20
+  allowed_origins:
+    - "${FRONTEND_URL}"  # dev: Vite origin; prod: served behind nginx

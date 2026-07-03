@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--tx); font-family: 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  ::selection { background: rgba(245,166,35,0.3); }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 2px solid var(--bg); }
+  *::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+  textarea, input, button { font-family: inherit; }
+  :root, [data-kh="dark"] {
+    --bg:#0E1116; --bg-deep:#0B0E13; --surface:#12161D; --card:#161B22; --hover-row:#141922; --track:#222934;
+    --line:#181D25; --border:#20262F; --border-strong:#2A313D; --border-hover:#3A4250; --dot-read:#272E39;
+    --tx:#E6E9EF; --tx2:#C7CDD8; --tx3:#9AA3B2; --tx4:#7C8494; --tx5:#646C7C;
+    --hover:rgba(255,255,255,0.04); --on-accent:#0E1116; --accent-ink:#F5A623;
+  }
+  [data-kh="light"] {
+    --bg:#F4F5F7; --bg-deep:#ECEEF1; --surface:#FFFFFF; --card:#FFFFFF; --hover-row:#EDEFF2; --track:#E2E5EA;
+    --line:#ECEEF1; --border:#E2E5EA; --border-strong:#D3D8DF; --border-hover:#C2C8D1; --dot-read:#C7CCD4;
+    --tx:#1B1F27; --tx2:#39414D; --tx3:#5C6573; --tx4:#79828F; --tx5:#99A1AD;
+    --hover:rgba(0,0,0,0.05); --on-accent:#0E1116; --accent-ink:#9A5B00;
+  }
+  @keyframes kh-spin { to { transform: rotate(360deg); } }
+  @keyframes kh-blink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+  @keyframes kh-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes kh-float { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-14px) rotate(4deg); } }
+  @keyframes kh-pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+  @keyframes kh-pulse { 0%,100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+</style>
+</helmet>
+
+<sc-if value="{{ showLogin }}" hint-placeholder-val="{{ true }}">
+<div data-screen-label="Login" data-kh="{{ themeAttr }}" style="position:fixed; inset:0; color:var(--tx); display:flex; align-items:center; justify-content:center; overflow:hidden; background:radial-gradient(1200px 700px at 50% -10%, rgba(245,166,35,0.10), transparent 60%), radial-gradient(900px 600px at 85% 110%, rgba(88,101,242,0.10), transparent 55%), var(--bg-deep);">
+  <div style="position:absolute; width:180px; height:180px; left:8%; top:18%; background:rgba(245,166,35,0.05); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); animation:kh-float 9s ease-in-out infinite;"></div>
+  <div style="position:absolute; width:120px; height:120px; left:80%; top:24%; background:rgba(88,101,242,0.06); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); animation:kh-float 11s ease-in-out infinite 1.5s;"></div>
+  <div style="position:absolute; width:90px; height:90px; left:18%; top:70%; background:rgba(245,166,35,0.05); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); animation:kh-float 10s ease-in-out infinite 0.7s;"></div>
+  <div style="position:absolute; width:140px; height:140px; left:72%; top:66%; background:rgba(245,166,35,0.04); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); animation:kh-float 13s ease-in-out infinite 2.2s;"></div>
+
+  <div style="position:relative; width:430px; max-width:92vw; padding:48px 44px 36px; background:var(--card); border:1px solid var(--border-strong); border-radius:20px; box-shadow:0 40px 90px -30px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.03);">
+    <div style="display:flex; flex-direction:column; align-items:center; text-align:center;">
+      <div style="position:relative; width:74px; height:74px; display:flex; align-items:center; justify-content:center; background:linear-gradient(150deg,#FFCB6B,#F5A623); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); box-shadow:0 12px 30px -8px rgba(245,166,35,0.6);">
+        <div style="width:42px; height:42px; background:var(--bg); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); display:flex; align-items:center; justify-content:center;">
+          <div style="width:14px; height:14px; background:#F5A623; clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);"></div>
+        </div>
+      </div>
+      <h1 style="margin:22px 0 0; font-family:'Space Grotesk',sans-serif; font-size:30px; font-weight:700; letter-spacing:-0.02em;">Hivly</h1>
+      <div style="margin-top:6px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:0.08em; color:var(--tx3); text-transform:uppercase;">Agente de conocimiento · self-hosted</div>
+      <p style="margin:20px 2px 0; font-size:14.5px; line-height:1.55; color:var(--tx2);">El conocimiento de tu comunidad de Discord, indexado y consultable. Iniciá sesión para buscar y chatear con el agente.</p>
+    </div>
+
+    <button onClick="{{ onLogin }}" style="margin-top:28px; width:100%; height:52px; display:flex; align-items:center; justify-content:center; gap:11px; border:none; border-radius:12px; cursor:pointer; font-size:15px; font-weight:600; color:#fff; background:#5865F2; box-shadow:0 10px 24px -10px rgba(88,101,242,0.8); transition:transform .12s ease, background .15s ease;" style-hover="background:#4853e0; transform:translateY(-1px);" style-active="transform:translateY(0);">
+      <sc-if value="{{ loggingIn }}" hint-placeholder-val="{{ false }}">
+        <span style="width:18px; height:18px; border:2px solid rgba(255,255,255,0.4); border-top-color:#fff; border-radius:50%; animation:kh-spin 0.7s linear infinite; display:inline-block;"></span>
+        <span>Conectando con Discord…</span>
+      </sc-if>
+      <sc-if value="{{ notLoggingIn }}" hint-placeholder-val="{{ true }}">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12 0-1.17.84-2.12 1.89-2.12 1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12 0-1.17.84-2.12 1.89-2.12 1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z"></path></svg>
+        <span>Continuar con Discord</span>
+      </sc-if>
+    </button>
+
+    <div style="margin-top:16px; display:flex; align-items:center; gap:8px; justify-content:center; color:var(--tx4); font-size:12.5px;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+      <span>Solo miembros del guild pueden acceder</span>
+    </div>
+
+    <div style="margin-top:26px; padding-top:18px; border-top:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--tx5); letter-spacing:0.04em;">
+      <span>scope: identify · guilds.members.read</span>
+      <span>v4.0</span>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showApp }}" hint-placeholder-val="{{ false }}">
+<div data-kh="{{ themeAttr }}" style="display:flex; height:100vh; width:100vw; overflow:hidden; color:var(--tx); background:var(--bg);">
+
+  <aside style="width:236px; flex-shrink:0; display:flex; flex-direction:column; background:var(--bg-deep); border-right:1px solid var(--line); padding:18px 14px;">
+    <div style="display:flex; align-items:center; gap:11px; padding:6px 8px 18px;">
+      <div style="position:relative; width:32px; height:32px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(150deg,#FFCB6B,#F5A623); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);">
+        <div style="width:18px; height:18px; background:var(--bg-deep); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); display:flex; align-items:center; justify-content:center;">
+          <div style="width:6px; height:6px; background:#F5A623; clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);"></div>
+        </div>
+      </div>
+      <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:17px; letter-spacing:-0.01em;">Hivly</div>
+    </div>
+
+    <nav style="display:flex; flex-direction:column; gap:3px; margin-top:6px;">
+      <sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="3">
+        <button onClick="{{ nav.onClick }}" style="{{ nav.style }}" style-hover="background:var(--hover);">
+          <span style="display:flex; width:18px; justify-content:center;" data-om-raster>{{ nav.icon }}</span>
+          <span>{{ nav.label }}</span>
+          <sc-if value="{{ nav.hasBadge }}" hint-placeholder-val="{{ false }}">
+            <span style="margin-left:auto; min-width:18px; height:18px; padding:0 5px; display:flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono',monospace; font-size:10.5px; font-weight:600; color:var(--on-accent); background:#F5A623; border-radius:9px;">{{ nav.badge }}</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </nav>
+
+    <div style="flex:1;"></div>
+
+    <div style="padding:13px; border:1px solid var(--border); border-radius:12px; background:var(--surface);">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="width:8px; height:8px; border-radius:50%; background:#3BA55D; box-shadow:0 0 0 3px rgba(59,165,93,0.18);"></span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--tx3);">hivly.config.yml</span>
+      </div>
+      <div style="margin-top:9px; display:flex; flex-direction:column; gap:5px; font-size:11.5px; color:var(--tx4);">
+        <div style="display:flex; justify-content:space-between;"><span>indexer</span><span style="color:#3BA55D;">running</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>redis stream</span><span style="color:#3BA55D;">ok</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>pgvector</span><span style="color:#3BA55D;">ok</span></div>
+      </div>
+    </div>
+    <div style="margin-top:12px; text-align:center; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--tx5); letter-spacing:0.05em;">self-hosted · open source</div>
+  </aside>
+
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+    <header style="height:62px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; padding:0 26px; border-bottom:1px solid var(--line); background:var(--bg);">
+      <div style="display:flex; align-items:center; gap:14px; min-width:0;">
+        <div style="display:flex; align-items:center; gap:9px;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="#5865F2"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-.01-.02-.04-.03-.07-.03-1.5.26-2.93.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95 0 .02.01.04.03.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06 0 .07-.02.4-.55.76-1.13 1.07-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.11-.08.22-.17.33-.25.02-.02.05-.02.07-.01 3.44 1.57 7.15 1.57 10.55 0 .02-.01.05-.01.07.01.11.09.22.17.33.26.04.03.04.09-.01.11-.52.31-1.07.56-1.64.78-.04.01-.05.06-.04.09.32.61.68 1.19 1.07 1.74.03.02.06.03.09.02 1.72-.53 3.45-1.33 5.25-2.65.02-.01.03-.03.03-.05.44-4.53-.73-8.46-3.1-11.95-.01-.01-.02-.02-.04-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12 0-1.17.84-2.12 1.89-2.12 1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12 0-1.17.84-2.12 1.89-2.12 1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z"></path></svg>
+          <span style="font-weight:600; font-size:15px;">{{ communityName }}</span>
+        </div>
+        <span style="width:1px; height:18px; background:var(--border-strong);"></span>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--tx4);">{{ statsLine }}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="display:flex; align-items:center; gap:7px; padding:5px 11px; border:1px solid var(--border); border-radius:999px; background:var(--surface);">
+          <span style="width:7px; height:7px; border-radius:50%; background:#F5A623; animation:kh-pulse 1.6s ease-in-out infinite;"></span>
+          <span style="font-size:11.5px; color:var(--tx3);">indexando en vivo</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px;">
+          <div style="width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; color:#fff; background:#5865F2;">{{ user.initials }}</div>
+          <span style="font-size:13.5px; color:var(--tx2);">{{ user.name }}</span>
+          <button onClick="{{ onToggleTheme }}" title="{{ themeTitle }}" style="display:flex; align-items:center; justify-content:center; width:30px; height:30px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--tx3); cursor:pointer;" style-hover="color:var(--accent-ink); border-color:var(--border-hover);"><span style="display:flex;" data-om-raster>{{ themeIcon }}</span></button>
+          <button onClick="{{ onLogout }}" title="Cerrar sesión" style="display:flex; align-items:center; justify-content:center; width:30px; height:30px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--tx3); cursor:pointer;" style-hover="color:#ED4245; border-color:#ED4245;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div style="flex:1; min-height:0; display:flex; flex-direction:column;">
+
+      <sc-if value="{{ isSearch }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Búsqueda" style="flex:1; overflow-y:auto; padding:34px 40px 60px;">
+        <div style="max-width:860px; margin:0 auto;">
+          <h2 style="margin:0; font-family:'Space Grotesk',sans-serif; font-size:25px; font-weight:600; letter-spacing:-0.02em;">Búsqueda de conocimiento</h2>
+          <p style="margin:7px 0 0; color:var(--tx3); font-size:14px;">Búsqueda semántica sobre los mensajes indexados de Discord. Cada resultado cita su fuente original.</p>
+
+          <div style="margin-top:22px; position:relative;">
+            <span style="position:absolute; left:17px; top:50%; transform:translateY(-50%); color:var(--tx4); display:flex;">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3" stroke-linecap="round"></path></svg>
+            </span>
+            <input value="{{ searchQuery }}" onInput="{{ onSearchInput }}" placeholder="¿Cómo configuro los canales a indexar?" style="width:100%; height:54px; padding:0 18px 0 48px; font-size:15px; color:var(--tx); background:var(--surface); border:1px solid var(--border-strong); border-radius:14px; outline:none;" style-focus="border-color:var(--accent-ink); box-shadow:0 0 0 3px rgba(245,166,35,0.12);">
+          </div>
+
+          <div style="margin-top:16px; display:flex; flex-wrap:wrap; gap:8px;">
+            <sc-for list="{{ channelFilters }}" as="ch" hint-placeholder-count="5">
+              <button onClick="{{ ch.onClick }}" style="{{ ch.style }}" style-hover="border-color:var(--border-hover);">{{ ch.label }}</button>
+            </sc-for>
+          </div>
+
+          <div style="margin-top:24px; display:flex; align-items:center; justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--tx4);">{{ resultCountLabel }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--tx5);">ordenado por similitud</span>
+          </div>
+
+          <div style="margin-top:14px; display:flex; flex-direction:column; gap:13px;">
+            <sc-for list="{{ results }}" as="r" hint-placeholder-count="4">
+              <div style="padding:18px 20px; background:var(--surface); border:1px solid var(--border); border-radius:14px;" style-hover="border-color:var(--border-hover);">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                  <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                    <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; color:var(--accent-ink); background:rgba(245,166,35,0.1); padding:3px 9px; border-radius:6px;">#{{ r.channel }}</span>
+                    <span style="font-size:12px; color:var(--tx5);">{{ r.date }}</span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:9px; flex-shrink:0;">
+                    <div style="width:54px; height:5px; border-radius:3px; background:var(--track); overflow:hidden;"><div style="height:100%; width:{{ r.simPct }}; background:linear-gradient(90deg,#F5A623,#FFCB6B); border-radius:3px;"></div></div>
+                    <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--tx3);">{{ r.sim }}</span>
+                  </div>
+                </div>
+                <p style="margin:12px 0 0; font-size:14.5px; line-height:1.6; color:var(--tx);">{{ r.content }}</p>
+                <div style="margin-top:13px; display:flex; align-items:center; justify-content:space-between;">
+                  <div style="display:flex; align-items:center; gap:9px;">
+                    <div style="width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:600; color:var(--on-accent); background:{{ r.authorColor }};">{{ r.authorInitials }}</div>
+                    <span style="font-size:13px; color:var(--tx3);">{{ r.author }}</span>
+                  </div>
+                  <a href="{{ r.link }}" target="_blank" style="display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--tx4); text-decoration:none;" style-hover="color:#5865F2;">
+                    <span>ver en Discord</span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg>
+                  </a>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:30px; text-align:center; padding:50px 20px; border:1px dashed var(--border-strong); border-radius:16px;">
+              <div style="font-size:15px; color:var(--tx3);">Sin coincidencias en el conocimiento indexado.</div>
+              <div style="margin-top:6px; font-size:13px; color:var(--tx5);">Probá con otros términos o consultá al agente en el chat.</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isDocs }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Documentos" style="flex:1; overflow-y:auto; padding:34px 40px 60px;">
+        <div style="max-width:980px; margin:0 auto;">
+          <h2 style="margin:0; font-family:'Space Grotesk',sans-serif; font-size:25px; font-weight:600; letter-spacing:-0.02em;">Documentos indexados</h2>
+          <p style="margin:7px 0 0; color:var(--tx3); font-size:14px;">Cada chunk proviene de mensajes agrupados por autor y ventana temporal. El punto ámbar marca las fuentes sin leer — tocá una fila para marcarla como leída.</p>
+
+          <div style="margin-top:20px; display:flex; flex-wrap:wrap; align-items:center; gap:10px;">
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <sc-for list="{{ docFilters }}" as="ch" hint-placeholder-count="5">
+                <button onClick="{{ ch.onClick }}" style="{{ ch.style }}" style-hover="border-color:var(--border-hover);">{{ ch.label }}</button>
+              </sc-for>
+            </div>
+            <div style="flex:1; min-width:12px;"></div>
+            <sc-if value="{{ hasUnread }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ onMarkAllRead }}" style="padding:7px 12px; border:1px solid var(--border); border-radius:999px; background:transparent; color:var(--tx3); font-size:12px; cursor:pointer;" style-hover="color:var(--tx); border-color:var(--border-hover);">Marcar todas como leídas</button>
+            </sc-if>
+            <button onClick="{{ onToggleUnread }}" style="{{ unreadToggleStyle }}" style-hover="border-color:var(--border-hover);">
+              <span style="width:7px; height:7px; border-radius:50%; background:#F5A623;"></span>
+              <span>{{ unreadToggleLabel }}</span>
+            </button>
+          </div>
+
+          <sc-if value="{{ docHasItems }}" hint-placeholder-val="{{ true }}">
+          <div style="margin-top:20px; border:1px solid var(--border); border-radius:14px; overflow:hidden; background:var(--surface);">
+            <div style="display:grid; grid-template-columns:1fr 130px 130px 96px; gap:14px; padding:12px 20px; background:var(--bg); border-bottom:1px solid var(--border); font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--tx5);">
+              <span>chunk</span><span>canal</span><span>autor</span><span style="text-align:right;">indexado</span>
+            </div>
+            <sc-for list="{{ docItems }}" as="d" hint-placeholder-count="6">
+              <div onClick="{{ d.onClick }}" style="display:grid; grid-template-columns:1fr 130px 130px 96px; gap:14px; padding:15px 20px; border-bottom:1px solid var(--line); align-items:center; cursor:pointer;" style-hover="background:var(--hover-row);">
+                <span style="display:flex; gap:11px; align-items:flex-start; min-width:0;">
+                  <span style="width:7px; height:7px; margin-top:6px; flex-shrink:0; border-radius:50%; background:{{ d.dotColor }}; box-shadow:{{ d.dotGlow }};"></span>
+                  <span style="font-size:13.5px; line-height:1.5; color:{{ d.textColor }}; font-weight:{{ d.weight }}; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">{{ d.content }}</span>
+                </span>
+                <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--accent-ink);">#{{ d.channel }}</span>
+                <span style="display:flex; align-items:center; gap:7px; min-width:0;">
+                  <span style="width:20px; height:20px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:600; color:var(--on-accent); background:{{ d.authorColor }};">{{ d.authorInitials }}</span>
+                  <span style="font-size:12.5px; color:var(--tx3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ d.author }}</span>
+                </span>
+                <span style="text-align:right; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--tx4);">{{ d.date }}</span>
+              </div>
+            </sc-for>
+          </div>
+          </sc-if>
+
+          <sc-if value="{{ docEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:20px; text-align:center; padding:48px 20px; border:1px dashed var(--border-strong); border-radius:14px;">
+              <div style="margin:0 auto 14px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; color:#3BA55D; background:rgba(59,165,93,0.12); border-radius:50%;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>
+              </div>
+              <div style="font-size:15px; color:var(--tx);">¡Estás al día! No te quedan fuentes sin leer.</div>
+              <div style="margin-top:6px; font-size:13px; color:var(--tx5);">Quitá el filtro “Sin leer” para ver todo el conocimiento indexado.</div>
+            </div>
+          </sc-if>
+
+          <div style="margin-top:18px; display:flex; align-items:center; justify-content:space-between;">
+            <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--tx5);">{{ docCountLabel }}</span>
+            <sc-if value="{{ docHasMore }}" hint-placeholder-val="{{ true }}">
+              <button onClick="{{ onLoadMore }}" style="padding:9px 20px; border:1px solid var(--border-strong); border-radius:10px; background:var(--surface); color:var(--tx2); font-size:13px; font-weight:500; cursor:pointer;" style-hover="border-color:var(--accent-ink); color:var(--accent-ink);">Cargar más</button>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <!-- Floating chat widget -->
+  <sc-if value="{{ chatClosed }}" hint-placeholder-val="{{ true }}">
+  <button onClick="{{ onToggleChat }}" aria-label="Abrir chat con el agente" style="position:fixed; bottom:24px; right:24px; z-index:60; width:60px; height:60px; display:flex; align-items:center; justify-content:center; border:none; cursor:pointer; background:transparent; transition:transform .14s ease;" style-hover="transform:translateY(-2px);">
+    <span style="position:absolute; inset:0; background:linear-gradient(150deg,#FFCB6B,#F5A623); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); box-shadow:0 14px 34px -10px rgba(245,166,35,0.65);"></span>
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#0E1116" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:relative;"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+    <sc-if value="{{ launcherActive }}" hint-placeholder-val="{{ false }}">
+      <span style="position:absolute; top:1px; right:1px; width:13px; height:13px; border-radius:50%; background:#3BA55D; border:2px solid var(--bg); animation:kh-pulse 1.4s ease-in-out infinite;"></span>
+    </sc-if>
+  </button>
+  </sc-if>
+
+  <sc-if value="{{ chatOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed; bottom:24px; right:24px; z-index:60; width:404px; max-width:calc(100vw - 32px); height:642px; max-height:calc(100vh - 48px); display:flex; flex-direction:column; background:var(--bg); border:1px solid var(--border-strong); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,0.6); overflow:hidden; animation:kh-pop 0.2s ease both;">
+    <div style="flex-shrink:0; display:flex; align-items:center; gap:10px; padding:13px 12px 13px 16px; border-bottom:1px solid var(--line); background:var(--bg-deep);">
+      <div style="position:relative; width:32px; height:32px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:linear-gradient(150deg,#FFCB6B,#F5A623); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);">
+        <div style="width:17px; height:17px; background:var(--bg-deep); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);"></div>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div style="font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:15px; line-height:1.15;">Hivly</div>
+        <div style="font-size:11px; color:var(--tx4); display:flex; align-items:center; gap:5px; margin-top:1px;"><span style="width:6px; height:6px; border-radius:50%; background:#3BA55D;"></span>Agente de conocimiento</div>
+      </div>
+      <button onClick="{{ onToggleHistory }}" title="Historial" style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:1px solid var(--border); border-radius:9px; background:transparent; color:var(--tx3); cursor:pointer;" style-hover="color:var(--accent-ink); border-color:var(--border-hover);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+      </button>
+      <button onClick="{{ onNewChat }}" title="Nueva conversación" style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:1px solid var(--border); border-radius:9px; background:transparent; color:var(--tx3); cursor:pointer;" style-hover="color:var(--accent-ink); border-color:var(--border-hover);">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+      <button onClick="{{ onCloseChat }}" title="Cerrar" style="display:flex; align-items:center; justify-content:center; width:32px; height:32px; border:1px solid var(--border); border-radius:9px; background:transparent; color:var(--tx3); cursor:pointer;" style-hover="color:#ED4245; border-color:#ED4245;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+      </button>
+    </div>
+
+    <div style="position:relative; flex:1; min-height:0; display:flex; flex-direction:column;">
+      <sc-if value="{{ chatHistoryOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute; inset:0; z-index:5; background:var(--bg); display:flex; flex-direction:column;">
+          <div style="padding:14px 16px 8px; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.08em; text-transform:uppercase; color:var(--tx5);">Historial de conversaciones</div>
+          <div style="flex:1; overflow-y:auto; padding:0 10px 14px; display:flex; flex-direction:column; gap:3px;">
+            <sc-for list="{{ conversations }}" as="c" hint-placeholder-count="3">
+              <button onClick="{{ c.onClick }}" style="{{ c.style }}" style-hover="background:var(--hover);">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="flex-shrink:0; opacity:0.7;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                <span style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left;">{{ c.title }}</span>
+                <span style="font-size:10.5px; color:var(--tx5); flex-shrink:0;">{{ c.time }}</span>
+              </button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="flex:1; overflow-y:auto; padding:22px 0;">
+        <div style="margin:0 auto; padding:0 18px; display:flex; flex-direction:column; gap:22px;">
+
+              <sc-if value="{{ chatEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:40px; text-align:center;">
+                  <div style="margin:0 auto; position:relative; width:60px; height:60px; display:flex; align-items:center; justify-content:center; background:linear-gradient(150deg,#FFCB6B,#F5A623); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);">
+                    <div style="width:34px; height:34px; background:var(--bg); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);"></div>
+                  </div>
+                  <h3 style="margin:20px 0 0; font-family:'Space Grotesk',sans-serif; font-size:21px; font-weight:600;">Preguntá lo que quieras</h3>
+                  <p style="margin:8px 0 0; color:var(--tx3); font-size:14px;">El agente responde con RAG sobre el conocimiento de la comunidad y cita sus fuentes.</p>
+                  <div style="margin-top:24px; display:flex; flex-direction:column; gap:9px; max-width:440px; margin-left:auto; margin-right:auto;">
+                    <sc-for list="{{ suggestions }}" as="s" hint-placeholder-count="3">
+                      <button onClick="{{ s.onClick }}" style="text-align:left; padding:13px 16px; border:1px solid var(--border); border-radius:11px; background:var(--surface); color:var(--tx2); font-size:13.5px; cursor:pointer;" style-hover="border-color:var(--accent-ink); color:#fff;">{{ s.text }}</button>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+
+              <sc-for list="{{ messages }}" as="m" hint-placeholder-count="2">
+                <div style="display:flex; gap:14px;">
+                  <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+                    <div style="width:30px; height:30px; flex-shrink:0; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:#fff; background:#5865F2;">{{ m.initials }}</div>
+                  </sc-if>
+                  <sc-if value="{{ m.isAgent }}" hint-placeholder-val="{{ true }}">
+                    <div style="width:30px; height:30px; flex-shrink:0; position:relative; display:flex; align-items:center; justify-content:center; background:linear-gradient(150deg,#FFCB6B,#F5A623); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);">
+                      <div style="width:15px; height:15px; background:var(--bg); clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);"></div>
+                    </div>
+                  </sc-if>
+
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:12.5px; font-weight:600; color:var(--tx3); margin-bottom:8px;">{{ m.who }}</div>
+
+                    <sc-if value="{{ m.showTrace }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-bottom:13px; border:1px solid var(--border); border-radius:12px; background:var(--bg-deep); overflow:hidden;">
+                        <div style="display:flex; align-items:center; gap:8px; padding:9px 14px; border-bottom:1px solid var(--line);">
+                          <sc-if value="{{ m.streaming }}" hint-placeholder-val="{{ true }}">
+                            <span style="width:13px; height:13px; border:2px solid var(--border-strong); border-top-color:var(--accent-ink); border-radius:50%; animation:kh-spin 0.7s linear infinite; display:inline-block;"></span>
+                          </sc-if>
+                          <sc-if value="{{ m.doneTrace }}" hint-placeholder-val="{{ false }}">
+                            <span style="display:flex; color:#3BA55D;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></span>
+                          </sc-if>
+                          <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; color:var(--tx4);">loop de ejecución</span>
+                        </div>
+                        <div style="padding:6px 0;">
+                          <sc-for list="{{ m.steps }}" as="st" hint-placeholder-count="3">
+                            <div style="display:flex; gap:11px; padding:7px 14px;">
+                              <span style="width:7px; height:7px; margin-top:5px; flex-shrink:0; border-radius:2px; background:{{ st.color }}; clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);"></span>
+                              <div style="min-width:0;">
+                                <span style="font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.04em; color:{{ st.color }};">{{ st.label }}</span>
+                                <div style="margin-top:2px; font-size:13px; line-height:1.5; color:var(--tx2);">{{ st.text }}</div>
+                                <sc-if value="{{ st.hasDetail }}" hint-placeholder-val="{{ false }}">
+                                  <div style="margin-top:4px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--tx4); background:var(--surface); border:1px solid var(--line); border-radius:7px; padding:6px 10px; overflow-x:auto;">{{ st.detail }}</div>
+                                </sc-if>
+                              </div>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
+
+                    <div style="font-size:15px; line-height:1.7; color:var(--tx); white-space:pre-wrap;">{{ m.text }}<sc-if value="{{ m.showCursor }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block; width:8px; height:17px; margin-left:2px; vertical-align:-2px; background:#F5A623; animation:kh-blink 1s step-end infinite;"></span></sc-if></div>
+
+                    <sc-if value="{{ m.hasCitations }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:14px;">
+                        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--tx5); margin-bottom:8px;">Fuentes</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                          <sc-for list="{{ m.citations }}" as="ct" hint-placeholder-count="2">
+                            <a href="{{ ct.link }}" target="_blank" style="display:flex; align-items:center; gap:8px; padding:6px 11px 6px 6px; border:1px solid var(--border); border-radius:9px; background:var(--surface); text-decoration:none;" style-hover="border-color:#5865F2;">
+                              <span style="width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:9.5px; font-weight:600; color:var(--on-accent); background:{{ ct.authorColor }};">{{ ct.authorInitials }}</span>
+                              <span style="font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--accent-ink);">#{{ ct.channel }}</span>
+                              <span style="font-size:11.5px; color:var(--tx3);">{{ ct.author }}</span>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8B93A1" stroke-width="2" stroke-linecap="round"><path d="M7 17L17 7"></path><path d="M8 7h9v9"></path></svg>
+                            </a>
+                          </sc-for>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </div>
+              </sc-for>
+        </div>
+      </div>
+
+      <div style="flex-shrink:0; padding:12px 16px 16px; border-top:1px solid var(--line); background:var(--bg);">
+        <div style="display:flex; align-items:flex-end; gap:9px; padding:7px 7px 7px 14px; background:var(--surface); border:1px solid var(--border-strong); border-radius:14px;" style-focus-within="border-color:var(--accent-ink);">
+          <textarea value="{{ draft }}" onInput="{{ onDraftInput }}" onKeyDown="{{ onDraftKey }}" rows="1" placeholder="Preguntá al agente…" style="flex:1; resize:none; max-height:120px; border:none; outline:none; background:transparent; color:var(--tx); font-size:14px; line-height:1.5; padding:8px 0;"></textarea>
+          <button onClick="{{ onSend }}" disabled="{{ sendDisabled }}" style="{{ sendBtnStyle }}">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"></path><path d="M22 2l-7 20-4-9-9-4 20-7z"></path></svg>
+          </button>
+        </div>
+        <div style="margin-top:8px; display:flex; align-items:center; justify-content:center; gap:6px; font-size:10.5px; color:var(--tx5); text-align:center;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+          <span>Respuestas con fuente verificable · tools de hivly.config.yml</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;communityName&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Aurora Labs&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Contenido&quot;}, &quot;showTrace&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Chat&quot;}, &quot;streamSpeed&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;Lenta&quot;, &quot;Normal&quot;, &quot;Rápida&quot;], &quot;default&quot;: &quot;Normal&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Chat&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: 'dark',
+    chatOpen: false,
+    chatHistoryOpen: false,
+    authed: false,
+    loggingIn: false,
+    screen: 'search',
+    searchQuery: '',
+    channelFilter: 'all',
+    docFilter: 'all',
+    docUnreadOnly: false,
+    docVisible: 6,
+    read: { 4: true, 5: true, 6: true, 7: true, 8: true, 9: true, 10: true, 11: true },
+    activeConv: 'c1',
+    draft: '',
+    sending: false,
+    convs: [
+      { id: 'c1', title: 'Configurar canales a indexar', time: '10:24' },
+      { id: 'c2', title: 'Error en el backfill inicial', time: 'ayer' },
+      { id: 'c3', title: 'Permisos del bot en Discord', time: 'lun' },
+    ],
+    msgs: {
+      c1: [
+        { role: 'user', text: '¿Cómo configuro qué canales se indexan?' },
+        {
+          role: 'agent',
+          streaming: false,
+          text: 'Los canales a indexar se definen en hivly.config.yml, dentro de la sección discord.channels. Cada entrada lleva id, name y enabled: true para activarla; poné enabled: false para excluir un canal del indexado.\n\nEl historial previo se controla aparte con backfill.limit (por defecto 1000 mensajes por canal). Los cambios se aplican al reiniciar el servicio.',
+          steps: [
+            { type: 'reasoning', text: 'El usuario pregunta por la configuración de canales. Reviso el conocimiento indexado antes de responder.' },
+            { type: 'tool', text: 'search_knowledge', detail: '{ query: "configurar canales indexar", top_k: 5 }' },
+            { type: 'observation', text: '2 fragmentos relevantes recuperados · #soporte, #general · similitud 0.93–0.96' },
+          ],
+          citations: [
+            { channel: 'soporte', author: 'marina_dev' },
+            { channel: 'general', author: 'tobias' },
+          ],
+        },
+      ],
+      c2: [],
+      c3: [],
+    },
+  };
+
+  authors = {
+    marina_dev: '#F2A03D',
+    tobias: '#5BC0DE',
+    sol_ng: '#C792EA',
+    lucas_b: '#57C98A',
+    nora: '#EE6C8A',
+    admin: '#F5A623',
+  };
+
+  knowledge = [
+    { channel: 'soporte', author: 'marina_dev', date: 'hace 2 h', sim: 0.96, content: 'La configuración de qué canales indexar se hace en hivly.config.yml, dentro de discord.channels. Cada canal lleva su id, name y enabled: true para activarlo.' },
+    { channel: 'general', author: 'tobias', date: 'hace 5 h', sim: 0.93, content: 'Si querés que el bot lea el historial viejo activá backfill.enabled y subí backfill.limit. Por defecto trae 1000 mensajes por canal.' },
+    { channel: 'dev', author: 'sol_ng', date: 'ayer', sim: 0.90, content: 'El retrieval usa pgvector con un índice HNSW y vector_cosine_ops, por eso la búsqueda por similitud queda por debajo de 200ms.' },
+    { channel: 'soporte', author: 'lucas_b', date: 'ayer', sim: 0.88, content: 'Los mensajes de bots se ignoran por defecto. Si necesitás indexar uno, poné ignore_bots: false en la config.' },
+    { channel: 'dev', author: 'sol_ng', date: 'hace 2 días', sim: 0.86, content: 'El agente nunca ejecuta tools de forma directa: se validan con Zod y corren en sandbox. Solo las tools con permission auto se ejecutan solas.' },
+    { channel: 'anuncios', author: 'admin', date: 'hace 3 días', sim: 0.84, content: 'Subimos Hivly a v4.0: ahora el login es 100% OAuth2 de Discord y solo entran miembros del guild.' },
+    { channel: 'general', author: 'nora', date: 'hace 4 días', sim: 0.82, content: 'Para levantar todo localmente es un solo comando: docker compose up. App, bot, postgres y redis arrancan juntos.' },
+    { channel: 'soporte', author: 'marina_dev', date: 'hace 5 días', sim: 0.80, content: 'Las notificaciones de indexado llegan por Telegram. Configurás bot_token y chat_id en notifications.telegram.' },
+    { channel: 'dev', author: 'tobias', date: 'hace 6 días', sim: 0.78, content: 'Los embeddings se generan con text-embedding-3-small y se guardan como vector(1536) en la tabla embeddings.' },
+    { channel: 'general', author: 'lucas_b', date: 'hace 1 sem', sim: 0.76, content: 'Cada respuesta del agente cita el canal, autor y enlace al mensaje original. Si no hay fuente, avisa que no sabe.' },
+    { channel: 'soporte', author: 'nora', date: 'hace 1 sem', sim: 0.74, content: 'Si el backfill se corta por rate limit de Discord, reintenta solo con backoff exponencial. No hace falta tocar nada.' },
+    { channel: 'dev', author: 'sol_ng', date: 'hace 2 sem', sim: 0.72, content: 'Los mensajes consecutivos del mismo autor se agrupan en un chunk (grouping_window: 10) para no perder contexto.' },
+  ];
+
+  channels = ['general', 'soporte', 'dev', 'anuncios'];
+
+  // ---- helpers ----
+  initials(name) {
+    const clean = String(name).replace(/[_-]/g, ' ').trim();
+    const parts = clean.split(/\s+/);
+    return ((parts[0] || '')[0] || '') + ((parts[1] || '')[0] || (parts[0] || '')[1] || '');
+  }
+  color(name) { return this.authors[name] || 'var(--tx3)'; }
+  link() { return 'https://discord.com/channels'; }
+  speedMs() {
+    const s = this.props.streamSpeed ?? 'Normal';
+    if (s === 'Lenta') return 38;
+    if (s === 'Rápida') return 8;
+    return 18;
+  }
+
+  // ---- auth ----
+  login = () => {
+    this.setState({ loggingIn: true });
+    setTimeout(() => this.setState({ loggingIn: false, authed: true }), 1100);
+  };
+  logout = () => this.setState({ authed: false, screen: 'search' });
+  toggleTheme = () => {
+    this.setState(s => {
+      const theme = s.theme === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('hivly-theme', theme); } catch (e) {}
+      return { theme };
+    });
+  };
+
+  // ---- read / unread ----
+  markRead(i) { this.setState(s => (s.read[i] ? null : { read: { ...s.read, [i]: true } })); }
+  markAllRead = () => {
+    this.setState(s => {
+      const read = { ...s.read };
+      this.knowledge.forEach((_r, i) => { read[i] = true; });
+      return { read };
+    });
+  };
+  unreadChipStyle(active) {
+    return 'display:flex; align-items:center; gap:7px; padding:7px 14px; border-radius:999px; cursor:pointer; font-size:12.5px; font-weight:500; font-family:\'IBM Plex Mono\',monospace; transition:all .12s ease; '
+      + (active
+        ? 'background:rgba(245,166,35,0.14); border:1px solid rgba(245,166,35,0.45); color:var(--accent-ink);'
+        : 'background:var(--surface); border:1px solid var(--border); color:var(--tx3);');
+  }
+
+  // ---- chat widget ----
+  toggleChat = () => this.setState(s => ({ chatOpen: !s.chatOpen, chatHistoryOpen: false }));
+  closeChat = () => this.setState({ chatOpen: false, chatHistoryOpen: false });
+  toggleHistory = () => this.setState(s => ({ chatHistoryOpen: !s.chatHistoryOpen }));
+
+  // ---- chat ----
+  selectConv(id) { this.setState({ activeConv: id, chatHistoryOpen: false }); }
+  newChat = () => {
+    const id = 'c' + Date.now();
+    this.setState(s => ({
+      convs: [{ id, title: 'Nueva conversación', time: 'ahora' }, ...s.convs],
+      msgs: { ...s.msgs, [id]: [] },
+      activeConv: id,
+      chatHistoryOpen: false,
+    }));
+  };
+
+  updateConv(cid, fn) {
+    this.setState(s => ({ msgs: { ...s.msgs, [cid]: fn(s.msgs[cid] || []) } }));
+  }
+  patchAgent(cid, fn) {
+    this.updateConv(cid, list => {
+      const c = list.slice();
+      c[c.length - 1] = fn(c[c.length - 1]);
+      return c;
+    });
+  }
+
+  send = (textArg) => {
+    const text = String(textArg != null && typeof textArg === 'string' ? textArg : this.state.draft).trim();
+    if (!text || this.state.sending) return;
+    const cid = this.state.activeConv;
+    const userMsg = { role: 'user', text };
+    const agentMsg = { role: 'agent', streaming: true, text: '', steps: [], citations: [] };
+    this.updateConv(cid, list => [...list, userMsg, agentMsg]);
+
+    // title the conversation from first question
+    this.setState(s => ({
+      draft: '',
+      sending: true,
+      convs: s.convs.map(c => (c.id === cid && (s.msgs[cid] || []).length === 0)
+        ? { ...c, title: text.length > 34 ? text.slice(0, 34) + '…' : text } : c),
+    }));
+
+    const steps = [
+      { type: 'reasoning', text: 'Analizo la pregunta y decido recuperar fragmentos del conocimiento indexado de la comunidad.' },
+      { type: 'tool', text: 'search_knowledge', detail: '{ query: "' + (text.length > 46 ? text.slice(0, 46) + '…' : text) + '", top_k: 5 }' },
+      { type: 'observation', text: '3 fragmentos recuperados · #soporte, #dev · similitud 0.81–0.94' },
+    ];
+    let delay = 480;
+    steps.forEach(st => {
+      setTimeout(() => this.patchAgent(cid, m => ({ ...m, steps: [...m.steps, st] })), delay);
+      delay += 720;
+    });
+
+    const answer = 'Revisé el conocimiento indexado de la comunidad y esto es lo que encontré. La configuración del sistema vive en hivly.config.yml y se valida con Zod al iniciar, y como Hivly es self-hosted los datos quedan siempre en tu propia infraestructura.\n\nSi querés, puedo afinar la búsqueda con un canal o autor concreto.';
+    const citations = [
+      { channel: 'soporte', author: 'marina_dev' },
+      { channel: 'dev', author: 'sol_ng' },
+    ];
+    const step = this.speedMs();
+    setTimeout(() => {
+      let i = 0;
+      const tick = () => {
+        i += 2;
+        this.patchAgent(cid, m => ({ ...m, text: answer.slice(0, i) }));
+        if (i < answer.length) {
+          this._t = setTimeout(tick, step);
+        } else {
+          this.patchAgent(cid, m => ({ ...m, streaming: false, citations }));
+          this.setState({ sending: false });
+        }
+      };
+      tick();
+    }, delay + 150);
+  };
+
+  onDraftKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); }
+  };
+
+  componentDidMount() {
+    try { const t = localStorage.getItem('hivly-theme'); if (t === 'light' || t === 'dark') this.setState({ theme: t }); } catch (e) {}
+  }
+  componentWillUnmount() { if (this._t) clearTimeout(this._t); }
+
+  // ---- render ----
+  navStyle(active) {
+    return 'display:flex; align-items:center; gap:12px; width:100%; padding:10px 12px; border:none; border-radius:10px; cursor:pointer; font-size:14px; font-weight:500; text-align:left; transition:background .12s ease; '
+      + (active
+        ? 'background:rgba(245,166,35,0.12); color:var(--accent-ink);'
+        : 'background:transparent; color:var(--tx3);');
+  }
+  chipStyle(active) {
+    return 'padding:7px 14px; border-radius:999px; cursor:pointer; font-size:12.5px; font-weight:500; font-family:\'IBM Plex Mono\',monospace; transition:all .12s ease; '
+      + (active
+        ? 'background:rgba(245,166,35,0.14); border:1px solid rgba(245,166,35,0.45); color:var(--accent-ink);'
+        : 'background:var(--surface); border:1px solid var(--border); color:var(--tx3);');
+  }
+  convStyle(active) {
+    return 'display:flex; align-items:center; gap:9px; width:100%; padding:9px 11px; border:none; border-radius:9px; cursor:pointer; font-size:13px; transition:background .12s ease; '
+      + (active
+        ? 'background:rgba(245,166,35,0.1); color:var(--accent-ink);'
+        : 'background:transparent; color:var(--tx2);');
+  }
+
+  icon(name) {
+    const c = React.createElement;
+    const svg = (children) => c('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }, children);
+    if (name === 'search') return svg([c('circle', { key: 1, cx: 11, cy: 11, r: 7 }), c('path', { key: 2, d: 'M21 21l-4.3-4.3' })]);
+    if (name === 'docs') return svg([c('path', { key: 1, d: 'M4 4h16v5H4z' }), c('path', { key: 2, d: 'M4 13h16M4 18h10' })]);
+    return svg([c('path', { key: 1, d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' })]);
+  }
+
+  themeIcon(isDark) {
+    const c = React.createElement;
+    const svg = (ch) => c('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round', strokeLinejoin: 'round' }, ch);
+    if (isDark) return svg([c('circle', { key: 1, cx: 12, cy: 12, r: 4 }), c('path', { key: 2, d: 'M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4' })]);
+    return svg([c('path', { key: 1, d: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z' })]);
+  }
+  mapResult(r) {
+    return {
+      channel: r.channel, author: r.author, date: r.date,
+      content: r.content,
+      sim: r.sim.toFixed(2),
+      simPct: Math.round(r.sim * 100) + '%',
+      authorColor: this.color(r.author),
+      authorInitials: this.initials(r.author).toUpperCase(),
+      link: this.link(),
+    };
+  }
+
+  stepDisplay(st) {
+    const map = {
+      reasoning: { label: 'razonamiento', color: 'var(--tx3)' },
+      tool: { label: 'tool_call', color: '#F5A623' },
+      observation: { label: 'observación', color: '#3BA55D' },
+    };
+    const meta = map[st.type] || map.reasoning;
+    const text = st.type === 'tool' ? st.text + '()' : st.text;
+    return { label: meta.label, color: meta.color, text, hasDetail: !!st.detail, detail: st.detail || '' };
+  }
+
+  mapMessage(m) {
+    const showTrace = (this.props.showTrace ?? true);
+    if (m.role === 'user') {
+      return { isUser: true, isAgent: false, who: this.user().name, initials: this.user().initials, text: m.text, showTrace: false, showCursor: false, hasCitations: false, steps: [], citations: [] };
+    }
+    return {
+      isUser: false, isAgent: true, who: 'Hivly',
+      text: m.text,
+      streaming: !!m.streaming,
+      doneTrace: !m.streaming && (m.steps || []).length > 0,
+      showCursor: !!m.streaming,
+      showTrace: showTrace && (m.steps || []).length > 0,
+      steps: (m.steps || []).map(s => this.stepDisplay(s)),
+      hasCitations: (m.citations || []).length > 0,
+      citations: (m.citations || []).map(ct => ({
+        channel: ct.channel, author: ct.author,
+        authorColor: this.color(ct.author),
+        authorInitials: this.initials(ct.author).toUpperCase(),
+        link: this.link(),
+      })),
+    };
+  }
+
+  user() { return { name: 'Vos', initials: 'VO' }; }
+
+  renderVals() {
+    const s = this.state;
+    const communityName = this.props.communityName ?? 'Aurora Labs';
+    const indexed = 12847;
+    const statsLine = indexed.toLocaleString('es') + ' mensajes · 4 canales · pgvector';
+
+    // search
+    const q = s.searchQuery.trim().toLowerCase();
+    let results = this.knowledge.slice();
+    if (s.channelFilter !== 'all') results = results.filter(r => r.channel === s.channelFilter);
+    if (q) {
+      const toks = q.split(/\s+/).filter(t => t.length > 1);
+      results = results.filter(r => {
+        const hay = (r.content + ' ' + r.channel + ' ' + r.author).toLowerCase();
+        return toks.length === 0 || toks.some(t => hay.includes(t));
+      });
+    }
+    results.sort((a, b) => b.sim - a.sim);
+    const resultsView = results.map(r => this.mapResult(r));
+
+    const filterDefs = ['all', ...this.channels];
+    const channelFilters = filterDefs.map(f => ({
+      label: f === 'all' ? 'todos' : '#' + f,
+      style: this.chipStyle(s.channelFilter === f),
+      onClick: () => this.setState({ channelFilter: f }),
+    }));
+
+    // docs
+    const read = s.read || {};
+    const unreadCount = this.knowledge.reduce((n, _r, i) => n + (read[i] ? 0 : 1), 0);
+    let docAll = this.knowledge.map((r, i) => ({ ...r, _i: i }));
+    if (s.docFilter !== 'all') docAll = docAll.filter(r => r.channel === s.docFilter);
+    if (s.docUnreadOnly) docAll = docAll.filter(r => !read[r._i]);
+    const docItems = docAll.slice(0, s.docVisible).map(r => {
+      const isUnread = !read[r._i];
+      return {
+        content: r.content, channel: r.channel, author: r.author, date: r.date,
+        authorColor: this.color(r.author), authorInitials: this.initials(r.author).toUpperCase(),
+        isUnread,
+        dotColor: isUnread ? '#F5A623' : 'var(--dot-read)',
+        dotGlow: isUnread ? '0 0 0 3px rgba(245,166,35,0.16)' : 'none',
+        textColor: isUnread ? 'var(--tx)' : 'var(--tx4)',
+        weight: isUnread ? '500' : '400',
+        onClick: () => this.markRead(r._i),
+      };
+    });
+    const docFilters = filterDefs.map(f => ({
+      label: f === 'all' ? 'todos' : '#' + f,
+      style: this.chipStyle(s.docFilter === f),
+      onClick: () => this.setState({ docFilter: f, docVisible: 6 }),
+    }));
+
+    // chat
+    const convs = s.convs.map(c => ({
+      title: c.title, time: c.time,
+      style: this.convStyle(c.id === s.activeConv),
+      onClick: () => this.selectConv(c.id),
+    }));
+    const rawMsgs = s.msgs[s.activeConv] || [];
+    const messages = rawMsgs.map(m => this.mapMessage(m));
+    const suggestionTexts = [
+      '¿Cómo configuro qué canales se indexan?',
+      '¿Cómo hago el backfill del historial?',
+      '¿Qué permisos necesita el bot en Discord?',
+    ];
+    const suggestions = suggestionTexts.map(t => ({ text: t, onClick: () => this.send(t) }));
+
+    const sendDisabled = s.sending || s.draft.trim().length === 0;
+    const sendBtnStyle = 'flex-shrink:0; width:40px; height:40px; display:flex; align-items:center; justify-content:center; border:none; border-radius:11px; transition:all .12s ease; '
+      + (sendDisabled
+        ? 'background:var(--line); color:var(--tx5); cursor:not-allowed;'
+        : 'background:#F5A623; color:var(--on-accent); cursor:pointer;');
+
+    return {
+      showLogin: !s.authed,
+      showApp: s.authed,
+      loggingIn: s.loggingIn,
+      notLoggingIn: !s.loggingIn,
+      onLogin: this.login,
+      onLogout: this.logout,
+      themeAttr: s.theme,
+      themeIcon: this.themeIcon(s.theme === 'dark'),
+      themeTitle: s.theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro',
+      onToggleTheme: this.toggleTheme,
+
+      communityName,
+      statsLine,
+      user: this.user(),
+
+      navItems: [
+        { label: 'Búsqueda', icon: this.icon('search'), style: this.navStyle(s.screen === 'search'), onClick: () => this.setState({ screen: 'search' }) },
+        { label: 'Documentos', icon: this.icon('docs'), style: this.navStyle(s.screen === 'docs'), onClick: () => this.setState({ screen: 'docs' }), hasBadge: unreadCount > 0, badge: String(unreadCount) },
+      ],
+      isSearch: s.screen === 'search',
+      isDocs: s.screen === 'docs',
+
+      chatOpen: s.chatOpen,
+      chatClosed: !s.chatOpen,
+      onToggleChat: this.toggleChat,
+      onCloseChat: this.closeChat,
+      launcherActive: s.sending && !s.chatOpen,
+      chatHistoryOpen: s.chatHistoryOpen,
+      onToggleHistory: this.toggleHistory,
+
+      searchQuery: s.searchQuery,
+      onSearchInput: e => this.setState({ searchQuery: e.target.value }),
+      channelFilters,
+      results: resultsView,
+      resultCountLabel: resultsView.length + (resultsView.length === 1 ? ' resultado' : ' resultados'),
+      noResults: resultsView.length === 0,
+
+      docFilters,
+      docItems,
+      docCountLabel: 'mostrando ' + docItems.length + ' de ' + docAll.length + (unreadCount ? ' · ' + unreadCount + ' sin leer' : ' · estás al día'),
+      docHasMore: docAll.length > s.docVisible,
+      onLoadMore: () => this.setState(st => ({ docVisible: st.docVisible + 4 })),
+      docUnreadOnly: s.docUnreadOnly,
+      unreadToggleStyle: this.unreadChipStyle(s.docUnreadOnly),
+      unreadToggleLabel: 'Sin leer · ' + unreadCount,
+      hasUnread: unreadCount > 0,
+      onToggleUnread: () => this.setState(st => ({ docUnreadOnly: !st.docUnreadOnly, docVisible: 6 })),
+      onMarkAllRead: this.markAllRead,
+      docEmpty: docItems.length === 0,
+      docHasItems: docItems.length > 0,
+
+      conversations: convs,
+      onNewChat: this.newChat,
+      messages,
+      chatEmpty: rawMsgs.length === 0,
+      suggestions,
+      draft: s.draft,
+      onDraftInput: e => this.setState({ draft: e.target.value }),
+      onDraftKey: this.onDraftKey,
+      onSend: () => this.send(),
+      sending: s.sending,
+      sendDisabled,
+      sendBtnStyle,
+    };
+  }
+}
+</script>
+</body>
+</html>

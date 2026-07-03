@@ -1,0 +1,95 @@
+# generated: 2026-06-30
+# last_updated: 2026-06-30
+# project: hivly
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# Action Item Status:
+#   - open: Committed during a retrospective, not yet addressed
+#   - in-progress: Actively being worked on
+#   - done: Completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Retrospective appends its action items to action_items; sprint-status surfaces open ones
+
+generated: 2026-06-30
+last_updated: 2026-06-30
+project: hivly
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # ── Épico 1: Fundación del Sistema ──────────────────────────────────────────
+  epic-1: backlog
+  1-1-inicializar-el-repositorio-y-la-estructura-del-monorepo: backlog
+  1-2-implementar-packages-shared-el-kernel-de-dominio: backlog
+  1-3-docker-compose-servicios-base-y-endpoint-health: backlog
+  epic-1-retrospective: optional
+
+  # ── Épico 2: Acceso y Autenticación ─────────────────────────────────────────
+  epic-2: backlog
+  2-1-sistema-de-diseno-en-packages-web: backlog
+  2-2-layout-principal-sidebar-y-pantalla-de-login: backlog
+  2-3-backend-discord-oauth2-y-sesiones-en-redis: backlog
+  2-4-rbac-proteccion-de-rutas-y-conexion-ui: backlog
+  epic-2-retrospective: optional
+
+  # ── Épico 3: Pipeline de Indexación de Conocimiento ─────────────────────────
+  epic-3: backlog
+  3-1-discord-bot-conexion-al-gateway-y-listener-messagecreate: backlog
+  3-2-discord-bot-backfill-historico-con-reconciliacion-por-snowflake: backlog
+  3-3-workers-indexer-embeddings-y-pgvector: backlog
+  epic-3-retrospective: optional
+
+  # ── Épico 4: Búsqueda, Documentos y Read Tracking ───────────────────────────
+  epic-4: backlog
+  4-1-backend-api-de-busqueda-semantica: backlog
+  4-2-backend-api-de-documentos-y-read-tracking: backlog
+  4-3-web-app-vista-busqueda: backlog
+  4-4-web-app-vista-documentos-read-tracking-ui-y-sidebar-badge: backlog
+  epic-4-retrospective: optional
+
+  # ── Épico 5: Agente RAG y Chat ───────────────────────────────────────────────
+  epic-5: backlog
+  5-1-endpoint-sse-de-chat-con-pipeline-rag: backlog
+  5-2-gestion-de-conversaciones-e-historial: backlog
+  5-3-widget-flotante-fab-panel-base: backlog
+  5-4-mensajes-de-chat-y-ui-de-streaming-sse: backlog
+  epic-5-retrospective: optional
+
+  # ── Épico 6: Sincronización, Notificaciones y Fiabilidad ────────────────────
+  epic-6: backlog
+  6-1-bot-deteccion-de-ediciones-y-borrados-en-tiempo-real: backlog
+  6-2-worker-sync-re-indexacion-y-purgado: backlog
+  6-3-sincronizacion-al-arranque-y-reconciliacion-offline: backlog
+  6-4-notificaciones-externas-seguridad-y-graceful-shutdown: backlog
+  epic-6-retrospective: optional
