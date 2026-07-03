@@ -7,6 +7,26 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./db": {
+      "types": "./src/db/index.ts",
+      "default": "./src/db/index.ts"
+    },
+    "./db/schema": {
+      "types": "./src/db/schema.ts",
+      "default": "./src/db/schema.ts"
+    },
+    "./schemas": {
+      "types": "./src/schemas/index.ts",
+      "default": "./src/schemas/index.ts"
+    },
+    "./config": {
+      "types": "./src/config/index.ts",
+      "default": "./src/config/index.ts"
+    },
+    "./types/events": {
+      "types": "./src/types/events.ts",
+      "default": "./src/types/events.ts"
     }
   },
   "main": "./src/index.ts",
@@ -14,5 +34,15 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.0",
+    "pg": "^8.13.0",
+    "yaml": "^2.6.0",
+    "zod": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.31.0"
   }
 }

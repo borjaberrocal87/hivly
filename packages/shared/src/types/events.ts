@@ -1,0 +1,60 @@
+// Redis Streams event contracts (AD-13). These are internal stream shapes (not
+// HTTP API bodies), so they live in `types/` as TS interfaces rather than as Zod
+// schemas in `schemas/`. Every event carries the four mandatory fields below.
+// Stream keys and consumer groups are FIXED invariants — never hardcode the
+// strings; import the constants.
+
+/** Fields every Discord stream event must carry. */
+export interface StreamEvent {
+  messageId: string; // Discord snowflake
+  channelId: string; // Discord snowflake
+  guildId: string; // Discord snowflake
+  timestamp: string; // ISO 8601 UTC
+}
+
+export interface MessageCreatedEvent extends StreamEvent {
+  type: 'discord.message.created';
+  content: string;
+  authorId: string;
+}
+
+export interface MessageUpdatedEvent extends StreamEvent {
+  type: 'discord.message.updated';
+  newContent: string;
+}
+
+export interface MessageDeletedEvent extends StreamEvent {
+  type: 'discord.message.deleted';
+}
+
+export type DiscordStreamEvent =
+  | MessageCreatedEvent
+  | MessageUpdatedEvent
+  | MessageDeletedEvent;
+
+/**
+ * Fixed Redis Stream keys and their consumer groups (AD-13 invariants).
+ * Producers and consumers MUST reference these constants, never string literals.
+ */
+export const STREAM_KEYS = {
+  /** New messages → Indexer (embeds + inserts). */
+  DISCORD_MESSAGES: 'hivly:discord:messages',
+  /** Edited messages → Sync (re-index). */
+  DISCORD_MESSAGES_UPDATED: 'hivly:discord:messages:updated',
+  /** Deleted messages → Sync (soft/hard delete). */
+  DISCORD_MESSAGES_DELETED: 'hivly:discord:messages:deleted',
+  /** Knowledge events → Notifier (deferred, Epic 6). */
+  KNOWLEDGE_EVENTS: 'hivly:knowledge:events',
+} as const;
+
+export const CONSUMER_GROUPS = {
+  /** Consumes DISCORD_MESSAGES. */
+  INDEXER: 'hivly:indexer',
+  /** Consumes DISCORD_MESSAGES_UPDATED and DISCORD_MESSAGES_DELETED. */
+  SYNC: 'hivly:sync',
+  /** Consumes KNOWLEDGE_EVENTS (deferred, Epic 6). */
+  NOTIFIER: 'hivly:notifier',
+} as const;
+
+export type StreamKey = (typeof STREAM_KEYS)[keyof typeof STREAM_KEYS];
+export type ConsumerGroup = (typeof CONSUMER_GROUPS)[keyof typeof CONSUMER_GROUPS];
