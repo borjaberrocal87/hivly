@@ -23,3 +23,8 @@
 - No integration test for health handler — unit tests cover logic; HTTP-level tests can be added in a later story
 - redis maxRetriesPerRequest: 1 is aggressive — tuning parameter; 503 on transient Redis outage is acceptable
 - Timeout test not explicitly covered — promise that never resolves not tested; both paths fall into the same catch of probe()
+
+## Deferred from: code review of 2-1-sistema-de-diseno-en-packages-web (2026-07-04)
+
+- Respetar `prefers-color-scheme` — el tema oscuro se fuerza sin consultar la preferencia del SO. La lógica de detección y toggle persistente con `localStorage` está planificada para Story 2.2, donde tiene sentido añadirlo.
+- `@media (prefers-reduced-motion: reduce)` — las 6 animaciones no tienen variante reduced-motion. Válido para accesibilidad pero aplica a todo el sistema de diseño, no solo a esta story.
