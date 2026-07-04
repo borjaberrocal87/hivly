@@ -1,17 +1,15 @@
 // Full-screen login (Story 2.2, AC1 + AC7). Presentational: it renders the
 // gradient background, four decorative floating hexagons, and the auth card.
-// The button reflects `loggingIn` (spinner vs Discord glyph) and calls `onLogin`.
+// The button calls `onLogin` (full-page navigation to Discord OAuth2).
 // UI copy is Spanish verbatim from the prototype; identifiers/comments English
-// (see story Dev Notes -> Language rule). Auth is client-side/mock in this story.
+// (see story Dev Notes -> Language rule).
 import type { CSSProperties, ReactElement } from 'react';
 
 import { DiscordIcon, LockIcon } from './icons';
 import { Hexagon } from './Hexagon';
 
 interface LoginScreenProps {
-  /** True while the mock login is in flight — shows the connecting spinner. */
-  loggingIn: boolean;
-  /** Start the (mock) Discord login. */
+  /** Start the Discord login (full-page navigation). */
   onLogin: () => void;
 }
 
@@ -52,7 +50,7 @@ const cardStyle: CSSProperties = {
   textAlign: 'center',
 };
 
-export function LoginScreen({ loggingIn, onLogin }: LoginScreenProps): ReactElement {
+export function LoginScreen({ onLogin }: LoginScreenProps): ReactElement {
   return (
     <div style={screenStyle}>
       {DECOR_HEXAGONS.map((hex, i) => (
@@ -107,7 +105,6 @@ export function LoginScreen({ loggingIn, onLogin }: LoginScreenProps): ReactElem
           type="button"
           className="kh-discord-btn"
           onClick={onLogin}
-          disabled={loggingIn}
           style={{
             marginTop: 28,
             width: '100%',
@@ -126,27 +123,8 @@ export function LoginScreen({ loggingIn, onLogin }: LoginScreenProps): ReactElem
             boxShadow: '0 10px 24px -10px rgba(88,101,242,0.8)',
           }}
         >
-          {loggingIn ? (
-            <>
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 18,
-                  height: 18,
-                  border: '2px solid rgba(255,255,255,0.4)',
-                  borderTopColor: '#fff',
-                  borderRadius: '50%',
-                  animation: 'kh-spin 0.7s linear infinite',
-                }}
-              />
-              Conectando con Discord…
-            </>
-          ) : (
-            <>
-              <DiscordIcon size={22} />
-              Continuar con Discord
-            </>
-          )}
+          <DiscordIcon size={22} />
+          Continuar con Discord
         </button>
 
         <div

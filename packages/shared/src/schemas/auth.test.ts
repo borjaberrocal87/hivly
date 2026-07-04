@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AUTH_ERROR, AuthMeResponseSchema } from './auth.js';
+import { AUTH_ERROR, AuthMeResponseSchema, AuthRolesResponseSchema } from './auth.js';
 
 describe('AuthMeResponseSchema', () => {
   it('should parse a valid profile when avatar is present', () => {
@@ -43,6 +43,31 @@ describe('AuthMeResponseSchema', () => {
   });
 });
 
+describe('AuthRolesResponseSchema', () => {
+  it('should parse a populated roles + allowedChannels response', () => {
+    const result = AuthRolesResponseSchema.safeParse({
+      roles: ['admin', 'mod'],
+      allowedChannels: ['1234567890', '9876543210'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('should parse empty arrays (deny-by-default: no matching rule)', () => {
+    const result = AuthRolesResponseSchema.safeParse({ roles: [], allowedChannels: [] });
+    expect(result.success).toBe(true);
+  });
+
+  it('should round-trip through parse without altering the arrays', () => {
+    const input = { roles: ['member'], allowedChannels: ['42'] };
+    expect(AuthRolesResponseSchema.parse(input)).toEqual(input);
+  });
+
+  it('should reject when a channel id is not a string', () => {
+    const result = AuthRolesResponseSchema.safeParse({ roles: ['admin'], allowedChannels: [42] });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('AUTH_ERROR', () => {
   it('should expose the stable auth error codes', () => {
     expect(AUTH_ERROR.AUTH_REQUIRED).toBe('AUTH_REQUIRED');
@@ -50,6 +75,7 @@ describe('AUTH_ERROR', () => {
     expect(AUTH_ERROR.INVALID_OAUTH_STATE).toBe('INVALID_OAUTH_STATE');
     expect(AUTH_ERROR.OAUTH_CALLBACK_FAILED).toBe('OAUTH_CALLBACK_FAILED');
     expect(AUTH_ERROR.LOGOUT_FAILED).toBe('LOGOUT_FAILED');
+    expect(AUTH_ERROR.RBAC_EXPANSION_FAILED).toBe('RBAC_EXPANSION_FAILED');
     expect(AUTH_ERROR.INTERNAL).toBe('INTERNAL');
   });
 });

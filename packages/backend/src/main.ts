@@ -5,6 +5,8 @@ import { loadConfig } from '@hivly/shared';
 import { createDatabase, type Database } from '@hivly/shared/db';
 
 import { createApp } from './app.js';
+import { createDrizzleChannelPermissionRepository } from './infrastructure/channelPermissionRepository.drizzle.js';
+import { materializeChannelPermissions } from './infrastructure/materializeChannelPermissions.js';
 import { createRedisClient } from './infrastructure/redis.js';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -17,7 +19,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   // AD-8: validate behavior config before opening any connection. Invalid YAML
   // throws ConfigError here and aborts the process (caught below).
   const config = loadConfig();
@@ -43,6 +45,16 @@ function main(): void {
       err instanceof Error ? err.message : String(err),
     );
   });
+
+  // AC1: materialize channel_permissions from config BEFORE accepting requests —
+  // no /api/* request may run against an unmaterialized RBAC table. This is the
+  // first DB query; if it throws (DB unreachable), abort startup (caught below).
+  // Compose gates the backend on migrator success + the postgres healthcheck, so
+  // the DB is expected up here. (Redis still connects in the background above.)
+  await materializeChannelPermissions(
+    createDrizzleChannelPermissionRepository(db),
+    config.access_control.channel_permissions,
+  );
 
   const app = createApp(db, redis, {
     sessionSecret,
@@ -72,10 +84,11 @@ function main(): void {
   process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
-try {
-  main();
-} catch (error) {
+// main() is async now (it awaits the channel_permissions materialization), so a
+// rejected startup surfaces here via .catch — a synchronous throw (e.g. loadConfig)
+// rejects the returned promise all the same. Either way: log and exit(1).
+main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`[backend] fatal: ${message}`);
   process.exit(1);
-}
+});

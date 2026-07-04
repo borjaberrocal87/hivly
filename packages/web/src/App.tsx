@@ -1,68 +1,87 @@
-// App root (Story 2.2, AC1/2/5/6/7). Holds client-side UI state: auth flag,
-// in-flight login flag, active screen, and the theme (via useTheme). Renders the
-// LoginScreen when unauthenticated, otherwise the AppLayout shell.
+// App root (Story 2.4, AC5/AC6). Holds client-side UI state: auth state, the
+// authenticated user profile, the active screen, and the theme (via useTheme).
 //
-// SCOPE: auth is client-side/mock only here. login() runs a ~1100ms setTimeout
-// (mirrors the prototype; lets the loading state be seen/tested) and flips a
-// boolean — there is no backend call yet. Story 2.3 adds Discord OAuth2 + Redis
-// sessions; Story 2.4 replaces this mock with a real GET /api/auth/me check on
-// mount + route protection, and wires communityName/statsLine/user from real
-// data. Keeping auth/login/logout in this root and passing display data as props
-// lets 2.4 swap the mock for a fetch without restructuring the components.
-import { useCallback, useEffect, useRef, useState } from 'react';
+// Real session flow (replaces the Story 2.2 mock): on mount it calls GET
+// /api/auth/me. While that resolves it shows a neutral loading state (NOT the
+// login screen — that would flash for authenticated users on every reload). 200 →
+// authed (render the shell); 401/null → anon (render LoginScreen). onLogin does a
+// full-page navigation to /api/auth/login so the browser leaves the SPA for the
+// Discord round-trip. onLogout POSTs /api/auth/logout then returns to the login
+// screen. Display data (community name, user) comes from real data / build config.
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 
+import type { AuthMeResponse } from '@hivly/shared/schemas';
+
+import { fetchMe, logout as apiLogout, LOGIN_URL } from './api/auth';
 import { AppLayout } from './components/AppLayout';
 import { LoginScreen } from './components/LoginScreen';
 import type { Screen } from './components/Sidebar';
 import { useTheme } from './hooks/useTheme';
+import { initialsFromUsername } from './lib/initials';
 import './styles/components.css';
 
-export const MOCK_LOGIN_DELAY_MS = 1100;
+type AuthState = 'loading' | 'anon' | 'authed';
 
-// Placeholder display data — wired to real data in Story 2.4 / Epic 4.
-const COMMUNITY_NAME = 'Aurora Labs';
-const STATS_LINE = '12.847 mensajes · 4 canales · pgvector';
-const USER = { name: 'Vos', initials: 'VO' };
+// Community name is build-time config (AD-3: the static SPA can't read the server
+// YAML). Real message stats arrive in Epic 4 — keep a neutral placeholder, not
+// fake numbers.
+const COMMUNITY_NAME = import.meta.env.VITE_COMMUNITY_NAME ?? 'Hivly';
+const STATS_LINE = 'indexación de conocimiento · pgvector';
 
 export function App(): ReactElement {
-  const [authed, setAuthed] = useState(false);
-  const [loggingIn, setLoggingIn] = useState(false);
+  const [authState, setAuthState] = useState<AuthState>('loading');
+  const [user, setUser] = useState<AuthMeResponse | null>(null);
   const [screen, setScreen] = useState<Screen>('search');
   const { theme, toggleTheme } = useTheme();
-  const loginTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const login = useCallback(() => {
-    setLoggingIn(true);
-    loginTimer.current = setTimeout(() => {
-      setAuthed(true);
-      setLoggingIn(false);
-      loginTimer.current = null;
-    }, MOCK_LOGIN_DELAY_MS);
-  }, []);
-
-  const logout = useCallback(() => {
-    if (loginTimer.current) {
-      clearTimeout(loginTimer.current);
-      loginTimer.current = null;
-    }
-    setAuthed(false);
-    setLoggingIn(false);
-    setScreen('search');
-  }, []);
-
-  // Cleanup: clear the pending login timer on unmount to avoid a stale
-  // setState callback on a removed component (Story 2.2 code review, P1).
+  // On mount: resolve the session. A stale/absent cookie yields 401 → anon.
   useEffect(() => {
+    let active = true;
+    fetchMe()
+      .then((profile) => {
+        if (!active) return;
+        if (profile) {
+          setUser(profile);
+          setAuthState('authed');
+        } else {
+          setAuthState('anon');
+        }
+      })
+      .catch(() => {
+        // A network/server error is treated as unauthenticated — never hang on loading.
+        if (active) setAuthState('anon');
+      });
     return () => {
-      if (loginTimer.current) {
-        clearTimeout(loginTimer.current);
-      }
+      active = false;
     };
   }, []);
 
-  if (!authed) {
-    return <LoginScreen loggingIn={loggingIn} onLogin={login} />;
+  // Full-page navigation: the browser must leave the SPA so Discord can redirect back.
+  const login = useCallback(() => {
+    window.location.href = LOGIN_URL;
+  }, []);
+
+  const logout = useCallback(() => {
+    void apiLogout()
+      .then(() => {
+        setUser(null);
+        setAuthState('anon');
+        setScreen('search');
+      })
+      .catch(() => {
+        // Network/server error during logout: keep the authed state so the user can
+        // retry or close the tab. The server-side session remains valid.
+        console.error('[web] logout request failed');
+      });
+  }, []);
+
+  if (authState === 'loading') {
+    return <LoadingSplash />;
+  }
+
+  if (authState === 'anon' || user === null) {
+    return <LoginScreen onLogin={login} />;
   }
 
   return (
@@ -71,10 +90,41 @@ export function App(): ReactElement {
       onNavigate={setScreen}
       communityName={COMMUNITY_NAME}
       statsLine={STATS_LINE}
-      user={USER}
+      user={{ name: user.username, initials: initialsFromUsername(user.username) }}
       theme={theme}
       onToggleTheme={toggleTheme}
       onLogout={logout}
     />
+  );
+}
+
+// Neutral splash shown while GET /api/auth/me is in flight, so the login screen
+// never flashes before the session check resolves.
+function LoadingSplash(): ReactElement {
+  return (
+    <div
+      role="status"
+      aria-label="Cargando"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'var(--bg-deep)',
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          width: 26,
+          height: 26,
+          border: '2px solid var(--border-strong)',
+          borderTopColor: '#5865F2',
+          borderRadius: '50%',
+          animation: 'kh-spin 0.7s linear infinite',
+        }}
+      />
+    </div>
   );
 }

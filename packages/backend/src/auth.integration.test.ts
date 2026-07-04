@@ -83,11 +83,15 @@ describe('Auth endpoints (integration)', () => {
     const app = createApp(clients.db, clients.redis, buildTestAppOptions({ oauth: memberOAuth() }));
     const agent = request.agent(app);
 
-    const { state, sid } = await login(agent);
+    const { state } = await login(agent);
     const cb = await agent.get(`/api/auth/callback?code=code-1&state=${state}`);
 
     expect(cb.status).toBe(302);
     expect(cb.headers.location).toBe('http://localhost:5173/');
+
+    // The session id is REGENERATED on the callback (P1, session-fixation safety),
+    // so the authenticated session lives under the callback's sid, not the login one.
+    const sid = sidFromSetCookie(cb.headers['set-cookie']);
 
     // User row upserted.
     const rows = await clients.db.execute(

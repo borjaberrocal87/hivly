@@ -14,6 +14,11 @@ export { schema };
 // depend only on @hivly/shared (AD-2).
 export { sql } from 'drizzle-orm';
 
+// Re-exported for the RBAC expansion query (AD-12): `WHERE allowed_roles && :roles`
+// (Postgres array-overlap `&&`). Same rationale as `sql` — the backend depends
+// only on @hivly/shared and must not import drizzle-orm directly (AD-2).
+export { arrayOverlaps } from 'drizzle-orm';
+
 /**
  * The typed Drizzle database handle, bound to the full Hivly schema. `$client` is
  * the underlying pg `Pool` — call `db.$client.end()` to close it (integration
