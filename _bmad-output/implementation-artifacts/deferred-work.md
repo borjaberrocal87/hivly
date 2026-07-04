@@ -24,6 +24,11 @@
 - redis maxRetriesPerRequest: 1 is aggressive — tuning parameter; 503 on transient Redis outage is acceptable
 - Timeout test not explicitly covered — promise that never resolves not tested; both paths fall into the same catch of probe()
 
+## Deferred from: code review of 2-2-layout-principal-sidebar-y-pantalla-de-login (2026-07-04)
+
+- Side effects inside setState updater in useTheme — `toggleTheme` performs DOM mutations and localStorage writes inside a `setState` updater (useTheme.ts:22-33). React state updaters should be pure; a `useEffect` keyed on `theme` is the conventional pattern. Not a real issue in current usage (no StrictMode effects in production).
+- login() has no internal guard against concurrent calls — `login` unconditionally starts a new `setTimeout` (App.tsx:35-42). LoginScreen button is `disabled={loggingIn}`, but if a future caller invokes `login()` while a timer is pending, a second timer starts and the first is orphaned. A `if (loginTimer.current) return;` guard would prevent this.
+
 ## Deferred from: code review of 2-1-sistema-de-diseno-en-packages-web (2026-07-04)
 
 - Respetar `prefers-color-scheme` — el tema oscuro se fuerza sin consultar la preferencia del SO. La lógica de detección y toggle persistente con `localStorage` está planificada para Story 2.2, donde tiene sentido añadirlo.

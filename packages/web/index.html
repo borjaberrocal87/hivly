@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hivly</title>
+    <!-- FOUC-free theme init (Story 2.2, AC6): runs synchronously before the stylesheet
+         <link>s below, so the persisted theme is applied to <html data-kh> before the
+         first paint — no flash of the wrong theme on reload. useTheme reads this back.
+         Falls back to the OS preference when nothing is stored (Story 2.1 deferred item),
+         else dark. Wrapped in try/catch because private-mode Safari throws on localStorage. -->
+    <script>
+      try {
+        var t = localStorage.getItem('hivly-theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-kh', t);
+      } catch (e) {
+        document.documentElement.setAttribute('data-kh', 'dark');
+      }
+    </script>
     <!-- Design-system fonts (Story 2.1): Space Grotesk (titles/brand), IBM Plex Sans
          (body/UI), IBM Plex Mono (metadata). Single non-render-blocking request via
          <link> + display=swap; preconnect warms the font hosts. -->

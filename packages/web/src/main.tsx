@@ -1,21 +1,19 @@
 // @hivly/web — static React SPA (AD-3: Vite build, no SSR, no Node server).
-// Story 2.1 lays the design-system foundation (tokens, fonts, keyframes, the
-// Hexagon primitive). The full app shell — login, sidebar, header, router, and
-// the persistent theme toggle + localStorage — arrives in Story 2.2.
+// Story 2.2 mounts the full app shell: login, sidebar, header, client-side nav,
+// and the persistent theme toggle. The theme is applied to <html data-kh> by a
+// blocking inline script in index.html BEFORE first paint (FOUC-free, AC6), so
+// there is no data-kh assignment here anymore — useTheme reads it back.
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { Hexagon } from './components/Hexagon';
+import { App } from './App';
 import './styles/global.css';
-
-// Default theme is dark; the persistent toggle lands in Story 2.2.
-document.documentElement.setAttribute('data-kh', 'dark');
 
 const container = document.getElementById('root');
 if (container) {
   createRoot(container).render(
     <StrictMode>
-      <Hexagon size={74} />
+      <App />
     </StrictMode>,
   );
 } else {
