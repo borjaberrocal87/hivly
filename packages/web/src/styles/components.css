@@ -1,0 +1,62 @@
+/*
+ * Component hover/focus states (Story 2.2).
+ *
+ * React inline styles cannot express :hover / :focus, so the interactive states
+ * the prototype relies on live here as classes. Static layout values stay as
+ * inline styles in each component. Colors reference design tokens; the only raw
+ * hex are the documented fixed brand colors (Discord #5865F2 / #4853e0, danger
+ * #ED4245) — see global.css and the story Dev Notes.
+ */
+
+/* Discord login button — lift + darken on hover. */
+.kh-discord-btn {
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+.kh-discord-btn:hover:not(:disabled) {
+  background: #4853e0;
+  transform: translateY(-1px);
+}
+.kh-discord-btn:disabled {
+  cursor: default;
+}
+.kh-discord-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Sidebar nav items. Base + inactive hover; the active modifier must beat :hover,
+   hence the paired selector. Active/inactive text color is set here too so the
+   component only toggles a class. */
+.kh-nav-item {
+  background: transparent;
+  color: var(--text-tertiary);
+}
+.kh-nav-item:hover {
+  background: var(--hover);
+}
+.kh-nav-item:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.kh-nav-item--active,
+.kh-nav-item--active:hover {
+  background: rgba(245, 166, 35, 0.12);
+  color: var(--accent-ink);
+}
+
+/* Header icon buttons (theme + logout) share the base look from inline styles;
+   only their hover accents differ. */
+.kh-icon-btn:hover {
+  color: var(--accent-ink);
+  border-color: var(--border-hover);
+}
+.kh-icon-btn:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+.kh-logout-btn:hover {
+  color: #ed4245;
+  border-color: #ed4245;
+}
