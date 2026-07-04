@@ -52,7 +52,7 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   # ── Épico 1: Fundación del Sistema ──────────────────────────────────────────
-  epic-1: in-progress
+  epic-1: done
   1-1-inicializar-el-repositorio-y-la-estructura-del-monorepo: done
   1-2-implementar-packages-shared-el-kernel-de-dominio: done
   1-3-docker-compose-servicios-base-y-endpoint-health: done
