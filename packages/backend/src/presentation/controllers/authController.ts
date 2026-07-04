@@ -7,6 +7,7 @@ import { AUTH_ERROR } from '@hivly/shared/schemas';
 import type { Request, Response } from 'express';
 
 import type { AuthService } from '../../application/services/authService.js';
+import type { RbacService } from '../../application/services/rbacService.js';
 import { GuildMembershipError } from '../../domain/repositories/discordOAuthClient.js';
 
 const DISCORD_AUTHORIZE_URL = 'https://discord.com/oauth2/authorize';
@@ -16,16 +17,18 @@ export interface AuthController {
   login(req: Request, res: Response): void;
   callback(req: Request, res: Response): Promise<void>;
   me(req: Request, res: Response): Promise<void>;
+  roles(req: Request, res: Response): Promise<void>;
   logout(req: Request, res: Response): void;
 }
 
 export function createAuthController(deps: {
   authService: AuthService;
+  rbacService: RbacService;
   discord: { clientId: string; redirectUri: string };
   frontendUrl: string;
   cookieSecure: boolean;
 }): AuthController {
-  const { authService, discord, frontendUrl, cookieSecure } = deps;
+  const { authService, rbacService, discord, frontendUrl, cookieSecure } = deps;
 
   return {
     login(req, res) {
@@ -119,6 +122,23 @@ export function createAuthController(deps: {
       } catch (err) {
         console.error('[auth] /me failed:', err instanceof Error ? err.message : String(err));
         res.status(500).json({ error: 'Internal error', code: AUTH_ERROR.INTERNAL });
+      }
+    },
+
+    async roles(req, res) {
+      // Defensive: the route also runs requireAuth, but never trust a single gate.
+      const userId = req.session.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Unauthorized', code: AUTH_ERROR.AUTH_REQUIRED });
+        return;
+      }
+      try {
+        const payload = await rbacService.getRolesResponse(req.session.discordRoles ?? []);
+        res.status(200).json(payload);
+      } catch (err) {
+        // Map the DB error to a structured 500 — never leak the raw error.
+        console.error('[auth] /roles failed:', err instanceof Error ? err.message : String(err));
+        res.status(500).json({ error: 'Internal error', code: AUTH_ERROR.RBAC_EXPANSION_FAILED });
       }
     },
 

@@ -38,3 +38,9 @@
 
 - No 429 retry logic for Discord rate limits — unlikely at current scale; add retry with `Retry-After` header parsing if rate limits become frequent
 - Error message leakage in logs — `console.error('[auth] callback failed:', ...)` may log Discord API error details; adopt structured logging with redaction in a future observability story
+
+## Deferred from: code review of 2-4-rbac-proteccion-de-rutas-y-conexion-ui (2026-07-05)
+
+- `access_control.enabled` not checked during materialization — explicitly out of scope per story Dev Notes ("Do not build an allow-all branch or a disable switch")
+- `discordRoles` typed as non-optional in `SessionData` — pre-existing pattern (mirrors `userId` which is also non-optional)
+- Short-circuit in `findAllowedChannelIds([])` not integration-tested against real Postgres — intentional optimization; covered by unit tests in `rbacService.test.ts`

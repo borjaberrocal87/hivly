@@ -41,7 +41,10 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-04
+last_updated: 2026-07-05
+# story 2-4 → review (bmad-dev-story)
+# story 2-4 → in-progress (bmad-dev-story)
+# story 2-4 → ready-for-dev (bmad-create-story)
 # story 2-3 → done (code review passed and patches applied)
 # story 2-3 → review (bmad-dev-story)
 # story 2-3 → in-progress (bmad-dev-story)
@@ -71,7 +74,7 @@ development_status:
   2-1-sistema-de-diseno-en-packages-web: done
   2-2-layout-principal-sidebar-y-pantalla-de-login: done
   2-3-backend-discord-oauth2-y-sesiones-en-redis: done
-  2-4-rbac-proteccion-de-rutas-y-conexion-ui: backlog
+  2-4-rbac-proteccion-de-rutas-y-conexion-ui: done
   epic-2-retrospective: optional
 
   # ── Épico 3: Pipeline de Indexación de Conocimiento ─────────────────────────

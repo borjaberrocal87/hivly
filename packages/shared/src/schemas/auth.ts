@@ -13,6 +13,18 @@ export const AuthMeResponseSchema = z.object({
 
 export type AuthMeResponse = z.infer<typeof AuthMeResponseSchema>;
 
+/**
+ * GET /api/auth/roles — the authenticated user's Discord roles and the channel
+ * IDs they may access (RBAC expansion result). `allowedChannels` is computed
+ * per-request from `channel_permissions`, never cached in the session.
+ */
+export const AuthRolesResponseSchema = z.object({
+  roles: z.array(z.string()),
+  allowedChannels: z.array(z.string()),
+});
+
+export type AuthRolesResponse = z.infer<typeof AuthRolesResponseSchema>;
+
 /** Stable error `code`s emitted by the auth endpoints (paired with ErrorSchema). */
 export const AUTH_ERROR = {
   AUTH_REQUIRED: 'AUTH_REQUIRED',
@@ -20,6 +32,7 @@ export const AUTH_ERROR = {
   INVALID_OAUTH_STATE: 'INVALID_OAUTH_STATE',
   OAUTH_CALLBACK_FAILED: 'OAUTH_CALLBACK_FAILED',
   LOGOUT_FAILED: 'LOGOUT_FAILED',
+  RBAC_EXPANSION_FAILED: 'RBAC_EXPANSION_FAILED',
   INTERNAL: 'INTERNAL',
 } as const;
 

@@ -1,99 +1,94 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { App, MOCK_LOGIN_DELAY_MS } from './App';
+import { App } from './App';
+import * as authApi from './api/auth';
+
+// Mock the fetch client (Story 2.4): tests drive the real session flow through
+// fetchMe/logout without touching the network. LOGIN_URL keeps its real value.
+vi.mock('./api/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./api/auth')>();
+  return { ...actual, fetchMe: vi.fn(), logout: vi.fn() };
+});
+
+const fetchMe = vi.mocked(authApi.fetchMe);
+const logout = vi.mocked(authApi.logout);
+
+const PROFILE = {
+  id: '550e8400-e29b-41d4-a716-446655440000',
+  discordId: '123456789012345678',
+  username: 'ada lovelace',
+  avatar: null,
+};
 
 afterEach(() => {
   cleanup();
-  vi.useRealTimers();
+  vi.clearAllMocks();
 });
 
-describe('App', () => {
-  it('should render the login screen when unauthenticated', () => {
+describe('App session flow', () => {
+  it('should show the login screen when the session check returns 401 (anon)', async () => {
+    fetchMe.mockResolvedValue(null);
+
     render(<App />);
 
-    expect(screen.getByRole('button', { name: /Continuar con Discord/i })).toBeTruthy();
-    // The authenticated shell (community name) is not shown yet.
-    expect(screen.queryByText('Aurora Labs')).toBeNull();
+    // The login screen appears once /me resolves; the authed shell (a <header>
+    // banner) is NOT rendered.
+    expect(await screen.findByRole('button', { name: /Continuar con Discord/i })).toBeTruthy();
+    expect(screen.queryByRole('banner')).toBeNull();
   });
 
-  it('should not crash when unmounted during the login timer (timer cleanup)', () => {
-    vi.useFakeTimers();
-    const { unmount } = render(<App />);
+  it('should render the authenticated shell with the real username, initials and community name', async () => {
+    fetchMe.mockResolvedValue(PROFILE);
 
-    fireEvent.click(screen.getByRole('button', { name: /Continuar con Discord/i }));
-    // Unmount while the 1100ms timer is still pending.
-    expect(() => unmount()).not.toThrow();
-  });
-
-  it('should show the loading state then the app shell when Discord login is clicked', () => {
-    vi.useFakeTimers();
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Continuar con Discord/i }));
-
-    // Loading state is visible during the mock delay.
-    expect(screen.getByText(/Conectando con Discord/i)).toBeTruthy();
-
-    act(() => {
-      vi.advanceTimersByTime(MOCK_LOGIN_DELAY_MS);
-    });
-
-    // Authenticated shell is now rendered.
-    expect(screen.getByText('Aurora Labs')).toBeTruthy();
+    // The real username derived from the session profile.
+    expect(await screen.findByText('ada lovelace')).toBeTruthy();
+    // Initials derived from the username ("ada lovelace" → "AL").
+    expect(screen.getByText('AL')).toBeTruthy();
+    // Community name (build default) renders in the header banner (unambiguous:
+    // "Hivly" also appears as the sidebar wordmark).
+    expect(within(screen.getByRole('banner')).getByText('Hivly')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Continuar con Discord/i })).toBeNull();
   });
 
-  it('should return to the login screen when logout is clicked', () => {
-    vi.useFakeTimers();
-    render(<App />);
+  it('should navigate to the login URL when the Discord button is clicked', async () => {
+    fetchMe.mockResolvedValue(null);
+    const original = window.location;
+    Object.defineProperty(window, 'location', { value: { href: '' }, writable: true });
 
-    fireEvent.click(screen.getByRole('button', { name: /Continuar con Discord/i }));
-    act(() => {
-      vi.advanceTimersByTime(MOCK_LOGIN_DELAY_MS);
-    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Continuar con Discord/i }));
+
+    expect(window.location.href).toBe(authApi.LOGIN_URL);
+    Object.defineProperty(window, 'location', { value: original, writable: true });
+  });
+
+  it('should return to the login screen after logout', async () => {
+    fetchMe.mockResolvedValue(PROFILE);
+    logout.mockResolvedValue();
+
+    render(<App />);
+    await screen.findByText('ada lovelace');
 
     fireEvent.click(screen.getByRole('button', { name: /Cerrar sesión/i }));
 
-    expect(screen.getByRole('button', { name: /Continuar con Discord/i })).toBeTruthy();
-    expect(screen.queryByText('Aurora Labs')).toBeNull();
+    expect(await screen.findByRole('button', { name: /Continuar con Discord/i })).toBeTruthy();
+    await waitFor(() => expect(logout).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('banner')).toBeNull();
   });
 
-  it('should switch the active content pane when a nav item is clicked', () => {
-    vi.useFakeTimers();
+  it('should switch the active content pane when a nav item is clicked (authed)', async () => {
+    fetchMe.mockResolvedValue(PROFILE);
+
     render(<App />);
-
-    fireEvent.click(screen.getByRole('button', { name: /Continuar con Discord/i }));
-    act(() => {
-      vi.advanceTimersByTime(MOCK_LOGIN_DELAY_MS);
-    });
-
-    // Default pane is Búsqueda.
-    expect(screen.getByText('Búsqueda de conocimiento')).toBeTruthy();
+    // Default pane is Búsqueda once authenticated.
+    expect(await screen.findByText('Búsqueda de conocimiento')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /Documentos/i }));
 
     expect(screen.getByText('Documentos indexados')).toBeTruthy();
     expect(screen.queryByText('Búsqueda de conocimiento')).toBeNull();
-  });
-
-  it('should reset the active pane to Búsqueda after logging out and back in', () => {
-    vi.useFakeTimers();
-    render(<App />);
-
-    fireEvent.click(screen.getByRole('button', { name: /Continuar con Discord/i }));
-    act(() => {
-      vi.advanceTimersByTime(MOCK_LOGIN_DELAY_MS);
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Documentos/i }));
-    expect(screen.getByText('Documentos indexados')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /Cerrar sesión/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Continuar con Discord/i }));
-    act(() => {
-      vi.advanceTimersByTime(MOCK_LOGIN_DELAY_MS);
-    });
-
-    expect(screen.getByText('Búsqueda de conocimiento')).toBeTruthy();
   });
 });
