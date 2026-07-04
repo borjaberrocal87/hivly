@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hivly</title>
+    <!-- Design-system fonts (Story 2.1): Space Grotesk (titles/brand), IBM Plex Sans
+         (body/UI), IBM Plex Mono (metadata). Single non-render-blocking request via
+         <link> + display=swap; preconnect warms the font hosts. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <!-- React mounts here (see src/main.tsx). The full SPA arrives in Epic 2. -->

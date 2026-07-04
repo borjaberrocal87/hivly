@@ -1,9 +1,15 @@
 {
+  // Web is a Vite bundler target, not a Node service: override the base's NodeNext
+  // module resolution with Bundler (Vite's recommended setting) so relative imports
+  // need no .js extension. `vite/client` supplies ambient types for CSS/asset
+  // side-effect imports (e.g. import './styles/global.css').
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "jsx": "react-jsx",
-    "types": [],
+    "types": ["vite/client"],
     "rootDir": "src"
   },
   "include": ["src"]
