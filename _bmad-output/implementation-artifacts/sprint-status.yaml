@@ -42,6 +42,9 @@
 
 generated: 2026-06-30
 last_updated: 2026-07-05
+# story 3-0 added (correct-course sprint-change 2026-07-05): provider config LLM/embeddings — blocks 3-3
+# epic-2 → done (all 4 stories + retrospective complete)
+# epic-2-retrospective → done (bmad-retrospective; epic-2-retro-2026-07-05.md)
 # story 2-4 → review (bmad-dev-story)
 # story 2-4 → in-progress (bmad-dev-story)
 # story 2-4 → ready-for-dev (bmad-create-story)
@@ -70,15 +73,16 @@ development_status:
   epic-1-retrospective: done
 
   # ── Épico 2: Acceso y Autenticación ─────────────────────────────────────────
-  epic-2: in-progress
+  epic-2: done
   2-1-sistema-de-diseno-en-packages-web: done
   2-2-layout-principal-sidebar-y-pantalla-de-login: done
   2-3-backend-discord-oauth2-y-sesiones-en-redis: done
   2-4-rbac-proteccion-de-rutas-y-conexion-ui: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # ── Épico 3: Pipeline de Indexación de Conocimiento ─────────────────────────
   epic-3: backlog
+  3-0-config-proveedores-llm-y-embeddings: backlog
   3-1-discord-bot-conexion-al-gateway-y-listener-messagecreate: backlog
   3-2-discord-bot-backfill-historico-con-reconciliacion-por-snowflake: backlog
   3-3-workers-indexer-embeddings-y-pgvector: backlog
@@ -122,6 +126,22 @@ action_items:
     owner: "Amelia (Dev)"
     status: done
   - epic: 1
-    action: "Dedicated hardening story: uncaughtException/unhandledRejection handlers + real graceful shutdown for bot/workers — first story of Epic 6"
+    action: "Dedicated hardening story: uncaughtException/unhandledRejection handlers + real graceful shutdown for bot/workers. SCOPE REVISED in Epic 2 retro: minimum (uncaughtException/unhandledRejection + reconnect-with-backoff) pulled forward into Epic 3 stories 3.1/3.3; real graceful shutdown (drain consumer group) stays in Epic 6."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 2
+    action: "Early validation spike of Epic 3's two external integrations — real smoke of the discord.js Gateway (connect, receive one messageCreate) and the embeddings API (one real call, verify 1536-dim vector) BEFORE building 3.1/3.3 logic on top. Addresses the ioredis-class late-validation risk."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 2
+    action: "Carry the integration-test discipline into the pipeline — tests against real Redis Streams (consumer group, XREADGROUP, XACK only after success) and real pgvector (idempotent UPSERT, AD-13). Part of the definition-of-done for 3.1 and 3.3."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 2
+    action: "Pull minimum hardening forward into Epic 3 — uncaughtException/unhandledRejection + reconnect-with-backoff in bot and workers, inside 3.1/3.3 (real graceful shutdown stays Epic 6)."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 2
+    action: "Carried deferred debt (non-blocking): prefers-reduced-motion for the six kh-* keyframes (from 2.1) — if Epic 3 adds any pipeline-UI animation, remember it is still open; useTheme setState side-effects + concurrent-login guard (2.2); Discord 429 retry + log redaction (2.3); access_control.enabled/allow-policy branch (Epic 4+). Tracked in deferred-work.md."
     owner: "Amelia (Dev)"
     status: open

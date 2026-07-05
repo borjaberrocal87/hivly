@@ -10,6 +10,7 @@
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@hivly/shared": "*"
+    "@hivly/shared": "*",
+    "discord.js": "^14.26.4"
   }
 }
