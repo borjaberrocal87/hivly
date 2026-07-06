@@ -95,6 +95,28 @@ describe('persistMessage (integration)', () => {
     });
   });
 
+  it('should keep 1 row and 1 stream event when the same message is persisted twice (idempotency)', async () => {
+    const id = uniqueId();
+    createdIds.push(id);
+    const deps = { config, db: clients.db, redis: clients.redis };
+
+    const first = await persistMessage(message(id), deps);
+    const second = await persistMessage(message(id), deps);
+
+    expect(first).toEqual({ inserted: true });
+    expect(second).toEqual({ inserted: false });
+
+    const rows = await clients.db.execute(
+      sql`select count(*)::int as n from discord_messages where id = ${id}`,
+    );
+    expect((rows.rows[0] as { n: number }).n).toBe(1);
+
+    const entries = await clients.redis.xRange(STREAM_KEYS.DISCORD_MESSAGES, '-', '+');
+    const mine = entries.filter((e) => e.message.messageId === id);
+    expect(mine).toHaveLength(1);
+    createdStreamIds.push(mine[0].id);
+  });
+
   it('should roll back the INSERT (0 rows) when the XADD fails', async () => {
     const id = uniqueId();
     createdIds.push(id); // registered for cleanup even though we expect 0 rows
