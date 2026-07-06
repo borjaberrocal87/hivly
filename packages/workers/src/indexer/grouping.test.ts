@@ -130,4 +130,33 @@ describe('groupByChannel', () => {
   it('should return no groups for an empty input', () => {
     expect(groupByChannel([], 10)).toEqual([]);
   });
+
+  it('should cap a misconfigured huge window instead of concatenating unbounded messages', () => {
+    const entries = Array.from({ length: 60 }, (_, i) => entry(`s${i}`, `m${i}`, 'c1'));
+
+    const groups = groupByChannel(entries, 10_000);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].messageIds).toHaveLength(50);
+    expect(groups[1].messageIds).toHaveLength(10);
+  });
+
+  it('should pass a window exactly at the cap through unclamped', () => {
+    const entries = Array.from({ length: 50 }, (_, i) => entry(`s${i}`, `m${i}`, 'c1'));
+
+    const groups = groupByChannel(entries, 50);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].messageIds).toHaveLength(50);
+  });
+
+  it('should clamp a window one over the cap', () => {
+    const entries = Array.from({ length: 51 }, (_, i) => entry(`s${i}`, `m${i}`, 'c1'));
+
+    const groups = groupByChannel(entries, 51);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].messageIds).toHaveLength(50);
+    expect(groups[1].messageIds).toHaveLength(1);
+  });
 });

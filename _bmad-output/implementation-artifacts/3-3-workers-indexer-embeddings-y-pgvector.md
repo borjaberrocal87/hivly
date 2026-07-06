@@ -1,13 +1,13 @@
 ---
 baseline_commit: 40fb5e0
-status: review
+status: done
 story_id: 3.3
 epic: 3
 ---
 
 # Story 3.3: Workers — Indexer (embeddings and pgvector)
 
-Status: review
+Status: done
 
 ## Story
 
@@ -128,6 +128,32 @@ The epic AC (`epics.md` §Historia 3.3) and `TECHNICAL-DESIGN.md` §5.3/§7 leav
   - [x] `deferred-work.md`: 3-1 "Indexer reads content / tolerates row-not-found" note struck through as resolved; new §"Decisions & deferrals from Story 3.3" records PEL-as-DLQ (no retry-max, no `MAXLEN`), stream-trimming still deferred, and the accepted stale-chunk crash-window corner.
 - [x] **Task 11 — Verification gate** (AC: 7)
   - [x] `npm run lint` 0 · `npm run test` 203 (30 files) · `npm run build` clean (5 workspaces) · `npm run test:integration` 22 (6 files). Manual smoke on the REAL embeddings endpoint: seeded #general event → 1536-dim embeddings row + `chunk_key`/`channel_id`/`message_ids` + `indexed_at` stamped + `XPENDING hivly:indexer`=0; re-XADD same id → count stays 1 (dedup, no re-embed). Branch `feat/3-3-workers-indexer-pgvector`; PR next; hand off to `bmad-code-review`.
+
+### Review Findings
+
+- [x] [Review][Patch] Duplicate `messageId` split across two grouping windows in the same batch collides on `chunk_key` (derived from `group.messageIds[0]`), causing `onConflictDoUpdate` to silently overwrite an already-embedded, already-ACKed chunk with different content — permanent silent data loss, zero error signal, no test coverage. [packages/workers/src/indexer/grouping.ts:53-82, packages/workers/src/indexer/indexBatch.ts:130-168] — Fixed: dedup by `messageId` in `indexBatch` before grouping, tracking every duplicate's `streamId` so they all ack once that message's group persists. Regression test added.
+- [x] [Review][Patch] `RawStreamEntry.message` can be `null` at runtime for a tombstoned (XDEL'd) PEL entry, but `parseCreatedEvent`/`indexBatch` assume it's always a field map — throws a TypeError that crashes the process every restart (infinite crash loop on that PEL entry). [packages/workers/src/indexer/events.ts:18-21, packages/workers/src/indexer/indexBatch.ts:48] — Fixed: `indexBatch` now guards `entry.message == null` and treats it like any other malformed entry (XACK + skip). Regression test added.
+- [x] [Review][Patch] `chunk_overlap >= chunk_size` (or non-positive `chunk_size`) is passed straight to `RecursiveCharacterTextSplitter` with no validation/clamping — throws on every group forever, unlike the analogous `grouping_window` clamp. [packages/workers/src/indexer/chunking.ts:36-42] — Fixed: `chunkContents` clamps `chunkSize` to ≥1 and `chunkOverlap` to `[0, chunkSize-1]`. Regression tests added.
+- [x] [Review][Patch] Embedder vector-count mismatch (`vectors.length !== chunks.length`) is unguarded — bypasses the dimension-guard's safety net and can insert `undefined` as an embedding. [packages/workers/src/indexer/indexBatch.ts:92-105] — Fixed: explicit count check throws before the dimension guard, caught by the existing per-group try/catch (logged, entries stay pending). Regression test added.
+- [x] [Review][Patch] SIGTERM/SIGINT handlers are registered after the up-to-10s Redis-connect race and embeddings-model creation — not before all long-running boot work as the inline comment claims ("learn from the 3.2 late-registration finding"). Low practical impact today, but contradicts the story's own stated intent. [packages/workers/src/main.ts:44-124] — Fixed: uncaughtException/unhandledRejection and SIGTERM/SIGINT handlers now register immediately after `loadConfig`/`createLogger`, before `requireEnv`, DB/Redis client creation, the connect race, and embeddings model creation.
+- [x] [Review][Patch] `shutdown()` races `indexerPromise` with a 7s timeout but never attaches a `.catch` to the promise itself — a late rejection after the race loses can surface as an unhandled rejection during shutdown. [packages/workers/src/main.ts:94-97] — Fixed: the race now consumes `indexerPromise.catch(() => undefined)`, and the outer `await indexerPromise` in `main()` swallows a late rejection once `shuttingDown` is true (shutdown() already owns the exit path) instead of racing it against a second `process.exit`.
+- [x] [Review][Patch] Per-group failure logging in `indexBatch` collapses distinct causes (embedder outage, DB error, chunking exception) into one generic message, making perpetually-pending entries harder to triage. [packages/workers/src/indexer/indexBatch.ts:113-117] — Fixed: a `stage` variable (`chunk`/`embed`/`persist`) is tracked and included in the failure log.
+- [x] [Review][Patch] No upper bound on configured `grouping_window` — a misconfigured large value lets one group concatenate an unbounded number of messages' content before the splitter ever engages. [packages/workers/src/indexer/grouping.ts:57] — Fixed: `groupByChannel` caps the coerced window at `MAX_GROUPING_WINDOW = 50`. Regression test added.
+
+All patches verified: `npm run lint` 0 · `npm run test` 209 (30 files, +6 new) · `npm run build` clean (5 workspaces) · `npm run test:integration` 22 (6 files, unchanged, all still green).
+
+### Review Findings — round 2 (re-review of the 8 patches above)
+
+- [x] [Review][Patch] `RawStreamEntry.message` was still typed non-nullable even though `indexBatch` now checks it for `null` — future code reading `.message` got no compiler help. [packages/workers/src/indexer/types.ts:10] — Fixed: widened to `Record<string, string> | null`.
+- [x] [Review][Patch] No upper bound on configured `chunk_size` — same class of gap as `grouping_window`, missed on the sibling config value. [packages/workers/src/indexer/chunking.ts:40] — Fixed: added `MAX_CHUNK_SIZE = 8000` cap, mirroring `MAX_GROUPING_WINDOW`. Regression test added.
+- [x] [Review][Patch] The Redis-connect-timeout catch block calls `process.exit(1)` unconditionally — a SIGTERM racing the same window could get a misleading "connect failed, aborting" fatal log and exit(1) over what was actually a clean shutdown. [packages/workers/src/main.ts:120-125] — Fixed: guarded with `if (shuttingDown) return;` so a concurrent graceful shutdown takes precedence.
+- [x] [Review][Patch] The `shuttingDown` swallow-path for `indexerPromise`'s final rejection discarded it with zero log trace — an unrelated real bug coinciding with a shutdown would leave no record. [packages/workers/src/main.ts:132-139] — Fixed: logs a debug line before returning.
+- [x] [Review][Patch] Both size caps (`grouping_window`, `chunk_size`) clamp silently per-batch with no operator-visible signal. [packages/workers/src/indexer/grouping.ts, packages/workers/src/indexer/chunking.ts] — Fixed: `MAX_GROUPING_WINDOW`/`MAX_CHUNK_SIZE` exported and checked once at boot in `main.ts`, logging a warning if the configured value exceeds the cap.
+- [x] [Review][Patch] Test-coverage gaps: misleading test comment ("per-character granularity") on the chunkSize clamp test, no boundary test for the grouping_window cap (50 vs 51), no 3x-duplicate test for the messageId dedup fix. — Fixed: comment corrected, boundary tests added, 3x-duplicate test added.
+
+Findings dismissed after verification (false positives / not reachable): a claimed TDZ crash from registering signal handlers before `db`/`redis` declaration (no `await` intervenes — same synchronous block, unreachable); a `NaN`-clamp concern in `chunkContents` (Zod's `z.number()` rejects `NaN` at config load, unreachable); a claim that patch 6 "fixes a non-issue" (still a valid exit-code-determinism improvement regardless); a claim that stage-logging should extend to the dimension-mismatch branch (that branch already has its own distinct message, was never in scope of the generic-collapse problem); a theoretical `runIndexer`-vs-torn-down-clients race during boot (`process.exit()` is synchronous/immediate, so this interleaving can't actually execute).
+
+All round-2 patches verified: `npm run lint` 0 · `npm run test` 213 (30 files, +4 new) · `npm run build` clean (5 workspaces) · `npm run test:integration` 22 (6 files, unchanged, all still green).
 
 ---
 

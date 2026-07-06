@@ -4,10 +4,12 @@
 import type { MessageCreatedEvent } from '@hivly/shared/types/events';
 
 /** A raw entry as node-redis delivers it from XREADGROUP: the stream id plus the
- *  flat all-string field map of the XADD. */
+ *  flat all-string field map of the XADD. `message` is `null` for a tombstoned
+ *  (XDEL'd) entry redelivered from the PEL — `indexBatch` treats it like any
+ *  other unprocessable entry (ack + skip). */
 export interface RawStreamEntry {
   id: string;
-  message: Record<string, string>;
+  message: Record<string, string> | null;
 }
 
 /** The slice of the embeddings model the Indexer depends on — injected so unit

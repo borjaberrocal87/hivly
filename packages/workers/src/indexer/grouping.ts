@@ -48,13 +48,17 @@ export function partitionByIndexState(
  * consecutive windows.
  *
  * `groupingWindow` is coerced to a positive integer (≥1) so a misconfigured 0 or
- * negative value can never produce empty groups or an infinite slice.
+ * negative value can never produce empty groups or an infinite slice, and capped
+ * at `MAX_GROUPING_WINDOW` so a fat-fingered huge value can't concatenate an
+ * unbounded number of messages into one chunking/embedding call.
  */
+export const MAX_GROUPING_WINDOW = 50;
+
 export function groupByChannel(
   entries: ParsedEntry[],
   groupingWindow: number,
 ): MessageGroup[] {
-  const window = Math.max(1, Math.floor(groupingWindow));
+  const window = Math.min(MAX_GROUPING_WINDOW, Math.max(1, Math.floor(groupingWindow)));
 
   // Preserve channel insertion order (first appearance in the batch) for
   // deterministic output; Map keeps insertion order.

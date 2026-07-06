@@ -192,6 +192,112 @@ describe('indexBatch', () => {
     );
   });
 
+  it('should XACK a tombstoned PEL entry (null message) instead of crashing', async () => {
+    const logger = makeLogger();
+    const { db, transactionCount } = makeFakeDb([]);
+
+    const { ackIds } = await indexBatch({
+      entries: [{ id: 's1', message: null }],
+      db,
+      embedder,
+      config,
+      logger,
+    });
+
+    expect(ackIds).toEqual(['s1']);
+    expect(transactionCount()).toBe(0);
+    expect(logger.warn).toHaveBeenCalledOnce();
+  });
+
+  it('should dedupe a producer-duplicate messageId split across two grouping windows and ack every stream id', async () => {
+    // grouping_window: 2 with entries [dup(m1), other(a), dup(m1), other(b)] in the
+    // same channel would, without dedup, slice into two groups both keying off
+    // `m1` — the second upsert would silently overwrite the first's content.
+    const dupConfig = {
+      knowledge: { chunk_size: 500, chunk_overlap: 50, grouping_window: 2 },
+      embeddings: { dimensions: DIMENSIONS },
+    } as unknown as HivlyConfig;
+    const logger = makeLogger();
+    const { db, inserted } = makeFakeDb([
+      { id: 'm1', indexedAt: null },
+      { id: 'a', indexedAt: null },
+      { id: 'b', indexedAt: null },
+    ]);
+
+    const { ackIds } = await indexBatch({
+      entries: [
+        raw('s-m1-first', { messageId: 'm1', channelId: 'c1', content: 'm1 content' }),
+        raw('s-a', { messageId: 'a', channelId: 'c1', content: 'a content' }),
+        raw('s-m1-second', { messageId: 'm1', channelId: 'c1', content: 'm1 content' }),
+        raw('s-b', { messageId: 'b', channelId: 'c1', content: 'b content' }),
+      ],
+      db,
+      embedder,
+      config: dupConfig,
+      logger,
+    });
+
+    // Only one chunk_key was ever inserted for m1 — no cross-group collision.
+    const m1Rows = inserted.filter((row) => row.chunkKey === 'm1:0');
+    expect(m1Rows).toHaveLength(1);
+    // Both stream ids for the duplicate messageId are acked once its group persists.
+    expect(ackIds).toContain('s-m1-first');
+    expect(ackIds).toContain('s-m1-second');
+    expect(ackIds).toContain('s-a');
+    expect(ackIds).toContain('s-b');
+  });
+
+  it('should ack all three occurrences of a triple producer-duplicate messageId', async () => {
+    const logger = makeLogger();
+    const { db, inserted } = makeFakeDb([{ id: 'm1', indexedAt: null }]);
+
+    const { ackIds } = await indexBatch({
+      entries: [
+        raw('s-1', { messageId: 'm1', channelId: 'c1', content: 'm1 content' }),
+        raw('s-2', { messageId: 'm1', channelId: 'c1', content: 'm1 content' }),
+        raw('s-3', { messageId: 'm1', channelId: 'c1', content: 'm1 content' }),
+      ],
+      db,
+      embedder,
+      config,
+      logger,
+    });
+
+    expect(inserted.filter((row) => row.chunkKey === 'm1:0')).toHaveLength(1);
+    expect(ackIds.sort()).toEqual(['s-1', 's-2', 's-3']);
+  });
+
+  it('should treat an embedder vector/chunk count mismatch as a failure, not persist, and leave entries pending', async () => {
+    const logger = makeLogger();
+    const { db, inserted } = makeFakeDb([{ id: 'm1', indexedAt: null }]);
+    // A long paragraph reliably splits into multiple chunks at chunkSize 10
+    // (verified by chunking.test.ts's identical setup); this embedder always
+    // returns exactly one vector, guaranteeing a count mismatch.
+    const oneVectorEmbedder: Embedder = {
+      embedDocuments: () => Promise.resolve([[0.1, 0.2, 0.3, 0.4]]),
+    };
+    const longContent = Array.from({ length: 20 }, (_, i) => `Sentence number ${i} here.`).join(' ');
+    const shortChunkConfig = {
+      knowledge: { chunk_size: 10, chunk_overlap: 2, grouping_window: 10 },
+      embeddings: { dimensions: DIMENSIONS },
+    } as unknown as HivlyConfig;
+
+    const { ackIds } = await indexBatch({
+      entries: [raw('s1', { messageId: 'm1', channelId: 'c1', content: longContent })],
+      db,
+      embedder: oneVectorEmbedder,
+      config: shortChunkConfig,
+      logger,
+    });
+
+    expect(ackIds).toEqual([]);
+    expect(inserted).toHaveLength(0);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('stage=embed'),
+      expect.objectContaining({ channelId: 'c1' }),
+    );
+  });
+
   it('should ack only ids returned by the stamp RETURNING', async () => {
     const logger = makeLogger();
     // m1 and m2 are both fresh and in the same channel → one group; but the stamp

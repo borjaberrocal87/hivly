@@ -115,7 +115,7 @@ describe('Indexer (integration)', () => {
     await xaddEvent(id, channelId, 'real event content to index');
 
     const entries = await readAsGroup(group);
-    expect(entries.map((e) => e.message.messageId)).toContain(id);
+    expect(entries.map((e) => e.message?.messageId)).toContain(id);
 
     const { ackIds } = await indexBatch({ entries, db: clients.db, embedder: goodEmbedder, config, logger });
     for (const aid of ackIds) await clients.redis.xAck(STREAM, group, aid);

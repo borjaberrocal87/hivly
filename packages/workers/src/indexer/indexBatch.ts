@@ -42,14 +42,16 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
   const ackIds: string[] = [];
 
   // 1. Parse. Malformed / foreign-typed entries can never succeed — XACK them so
-  //    they leave the PEL instead of being redelivered forever (AC-2).
+  //    they leave the PEL instead of being redelivered forever (AC-2). A tombstoned
+  //    (XDEL'd) PEL entry can be redelivered with `message: null` — treat it the
+  //    same as any other unprocessable entry instead of throwing.
   const parsed: ParsedEntry[] = [];
   for (const entry of entries) {
-    const event = parseCreatedEvent(entry.message);
+    const event = entry.message == null ? null : parseCreatedEvent(entry.message);
     if (event === null) {
-      logger.warn('discarding malformed or foreign stream entry', {
+      logger.warn('discarding malformed, foreign, or tombstoned stream entry', {
         streamId: entry.id,
-        type: entry.message.type,
+        type: entry.message?.type,
       });
       ackIds.push(entry.id);
       continue;
@@ -76,8 +78,30 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
     });
   }
 
+  // A producer duplicate can put the SAME messageId in `toProcess` twice (up to 3x,
+  // per persistMessage's documented COMMIT-race amplification). If two occurrences
+  // landed in different grouping windows, both groups would derive the identical
+  // `chunk_key` from `messageIds[0]` and the second upsert would silently overwrite
+  // the first's content. Dedup by messageId BEFORE grouping — keep the first
+  // occurrence for content/grouping, and remember every duplicate's streamId so
+  // they all get acked once that messageId's group is confirmed persisted.
+  const seenMessageIds = new Set<string>();
+  const dedupedToProcess: ParsedEntry[] = [];
+  const extraStreamIdsByMessageId = new Map<string, string[]>();
+  for (const parsedEntry of toProcess) {
+    const { messageId } = parsedEntry.event;
+    if (seenMessageIds.has(messageId)) {
+      const extras = extraStreamIdsByMessageId.get(messageId) ?? [];
+      extras.push(parsedEntry.streamId);
+      extraStreamIdsByMessageId.set(messageId, extras);
+      continue;
+    }
+    seenMessageIds.add(messageId);
+    dedupedToProcess.push(parsedEntry);
+  }
+
   // 3. Group by channel, then chunk → embed → guard → upsert, one group at a time.
-  const groups = groupByChannel(toProcess, config.knowledge.grouping_window);
+  const groups = groupByChannel(dedupedToProcess, config.knowledge.grouping_window);
   const dimensions = config.embeddings.dimensions;
   const chunkOptions = {
     chunkSize: config.knowledge.chunk_size,
@@ -85,11 +109,25 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
   };
 
   for (const group of groups) {
+    // Tracks which stage failed so the error log below distinguishes an embedder
+    // outage from a chunking exception from a DB/transaction failure, instead of
+    // collapsing every cause into one generic message.
+    let stage: 'chunk' | 'embed' | 'persist' = 'chunk';
     try {
       const chunks = await chunkContents(group.contents, chunkOptions);
       // Non-blank content always yields ≥1 chunk; the empty case is defensive so a
       // valid-but-unchunkable group still gets stamped+acked instead of looping.
+      stage = 'embed';
       const vectors = chunks.length > 0 ? await embedder.embedDocuments(chunks) : [];
+
+      // The embedder is a third-party boundary — it may return fewer (or more)
+      // vectors than chunks requested. Treat a count mismatch as an embed failure
+      // rather than let `persistGroup` index past the shorter array.
+      if (vectors.length !== chunks.length) {
+        throw new Error(
+          `embedder returned ${vectors.length} vectors for ${chunks.length} chunks`,
+        );
+      }
 
       // AC-3: every returned vector must match the configured width or the group
       // is NOT persisted and its entries stay pending (no ack) for redelivery.
@@ -104,15 +142,21 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
         continue; // no ack ids for this group
       }
 
+      stage = 'persist';
       const stamped = await persistGroup(db, group, chunks, vectors);
       // AC-4/AC-5: only ids whose row came back from the stamp RETURNING may be
-      // acked; a message whose row is still missing stays pending.
+      // acked; a message whose row is still missing stays pending. Any duplicate
+      // stream entries for the same messageId (deduped above) ride along.
       for (let i = 0; i < group.messageIds.length; i++) {
-        if (stamped.has(group.messageIds[i])) ackIds.push(group.streamIds[i]);
+        if (!stamped.has(group.messageIds[i])) continue;
+        ackIds.push(group.streamIds[i]);
+        const extras = extraStreamIdsByMessageId.get(group.messageIds[i]);
+        if (extras) ackIds.push(...extras);
       }
     } catch (err) {
-      logger.error('failed to index group — entries stay pending', {
+      logger.error(`failed to index group at stage=${stage} — entries stay pending`, {
         channelId: group.channelId,
+        stage,
         reason: err instanceof Error ? err.message : String(err),
       });
       // No ack ids for this group; later groups still run (AC-5).

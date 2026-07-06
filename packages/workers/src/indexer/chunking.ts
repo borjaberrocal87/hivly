@@ -19,6 +19,11 @@ function approxTokenLength(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+/** Defensive ceiling on `chunk_size` (approx tokens) — a fat-fingered config value
+ *  should not build one enormous chunk per group; mirrors `groupByChannel`'s cap
+ *  on `grouping_window`. */
+export const MAX_CHUNK_SIZE = 8000;
+
 /**
  * Join a group's message `content`s with `'\n'` and split into chunks.
  *
@@ -33,9 +38,16 @@ export async function chunkContents(
   const text = contents.join('\n');
   if (text.trim() === '') return [];
 
+  // The splitter throws synchronously if chunkOverlap >= chunkSize (or chunkSize
+  // <= 0), which would fail every group forever for a single bad config value.
+  // Clamp the same way `groupByChannel` clamps `grouping_window` — a positive
+  // chunkSize, with overlap capped strictly below it.
+  const chunkSize = Math.min(MAX_CHUNK_SIZE, Math.max(1, Math.floor(options.chunkSize)));
+  const chunkOverlap = Math.min(Math.max(0, Math.floor(options.chunkOverlap)), chunkSize - 1);
+
   const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: options.chunkSize,
-    chunkOverlap: options.chunkOverlap,
+    chunkSize,
+    chunkOverlap,
     lengthFunction: approxTokenLength,
   });
 
