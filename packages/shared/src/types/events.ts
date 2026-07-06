@@ -33,6 +33,24 @@ export type DiscordStreamEvent =
   | MessageDeletedEvent;
 
 /**
+ * Emitted once per bot boot after the historical backfill has attempted every
+ * enabled channel (even when some failed). NOT message-scoped, so it does not
+ * extend StreamEvent. Counts are numbers here; producers stringify every field
+ * on XADD (AD-13 — all stream values are strings).
+ */
+export interface BackfillCompletedEvent {
+  type: 'discord.backfill.completed';
+  guildId: string; // Discord snowflake
+  timestamp: string; // ISO 8601 UTC
+  channelsProcessed: number;
+  channelsFailed: number;
+  messagesPublished: number;
+}
+
+/** Events on KNOWLEDGE_EVENTS — a union so Epic 6 can grow it without churn. */
+export type KnowledgeStreamEvent = BackfillCompletedEvent;
+
+/**
  * Fixed Redis Stream keys and their consumer groups (AD-13 invariants).
  * Producers and consumers MUST reference these constants, never string literals.
  */
