@@ -533,7 +533,7 @@ flowchart TD
 | `hivly:discord:messages` | bot | `hivly:indexer` | workers/indexer | Indexar mensajes nuevos |
 | `hivly:discord:messages:updated` | bot | `hivly:sync` | workers/sync | Re-indexar mensajes editados |
 | `hivly:discord:messages:deleted` | bot | `hivly:sync` | workers/sync | Purgar mensajes borrados |
-| `hivly:knowledge:events` *(planned — Epic 6)* | workers/bot | `hivly:notifier` | notifier *(deferred)* | Notificaciones al operador |
+| `hivly:knowledge:events` | bot (desde 3.2: `discord.backfill.completed`); workers *(Epic 6)* | `hivly:notifier` | notifier *(deferred — Epic 6)* | Notificaciones al operador |
 
 ### Schema mínimo de cada mensaje de stream
 

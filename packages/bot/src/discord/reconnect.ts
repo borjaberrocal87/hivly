@@ -31,8 +31,10 @@ const defaultSleep = (ms: number): Promise<void> =>
 /**
  * Await `wait`, but resolve immediately if `signal` aborts first — so a mid-backoff
  * SIGTERM isn't stuck for up to MAX_DELAY_MS. Without a signal it just awaits `wait`.
+ * Exported as the single home of this abort logic — the backfiller reuses it for
+ * its inter-page throttle (never duplicate this subtlety).
  */
-function waitOrAbort(wait: Promise<void>, signal?: AbortSignal): Promise<void> {
+export function waitOrAbort(wait: Promise<void>, signal?: AbortSignal): Promise<void> {
   if (!signal) return wait;
   if (signal.aborted) return Promise.resolve();
   return new Promise<void>((resolve) => {

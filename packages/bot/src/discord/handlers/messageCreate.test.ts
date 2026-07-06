@@ -46,9 +46,18 @@ describe('handleMessageCreate', () => {
   let logger: Logger;
 
   beforeEach(() => {
-    // A transaction that runs its callback against a no-op tx (INSERT resolves).
-    const tx = { insert: vi.fn(() => ({ values: vi.fn().mockResolvedValue(undefined) })) };
-    transaction = vi.fn((cb: (t: typeof tx) => Promise<void>) => cb(tx));
+    // A transaction that runs its callback against a fake tx whose idempotent
+    // INSERT chain reports one inserted row (the no-conflict case).
+    const tx = {
+      insert: vi.fn(() => ({
+        values: vi.fn((v: { id: string }) => ({
+          onConflictDoNothing: vi.fn(() => ({
+            returning: vi.fn(() => Promise.resolve([{ id: v.id }])),
+          })),
+        })),
+      })),
+    };
+    transaction = vi.fn((cb: (t: typeof tx) => Promise<boolean>) => cb(tx));
     xAdd = vi.fn().mockResolvedValue('1-0');
     logger = fakeLogger();
     deps = {

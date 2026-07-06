@@ -7,6 +7,8 @@ import { createDatabase, type Database } from '@hivly/shared/db';
 import { createRedisClient } from '@hivly/shared/redis';
 import { Events } from 'discord.js';
 
+import { runBackfill } from './backfill/backfiller.js';
+import { getChannelCursor } from './backfill/cursor.js';
 import { createDiscordClient, login } from './discord/client.js';
 import { handleMessageCreate } from './discord/handlers/messageCreate.js';
 import { bindGatewayEvents, connectWithRetry } from './discord/reconnect.js';
@@ -60,11 +62,48 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // AC-1 (Story 3.2): resolve every per-channel backfill cursor BEFORE any Gateway
+  // I/O. Once login() succeeds the live listener starts inserting, and a live row
+  // would advance a channel's newest message past the offline gap — the cursor
+  // must reflect only what a PREVIOUS process persisted.
+  const backfillCursors = new Map<string, string | null>();
+  if (config.discord.backfill.enabled) {
+    for (const channel of config.discord.channels) {
+      if (!channel.enabled) continue;
+      try {
+        backfillCursors.set(channel.id, await getChannelCursor(db, channel.id));
+      } catch (error) {
+        // A transient DB blip (or a driver contract break — getChannelCursor
+        // throws rather than returning null for that) must not crash the process
+        // before the Gateway connects, but must NOT be treated as "first run"
+        // either: that would silently downgrade this channel's unbounded gap
+        // fetch to the bounded `limit` path. Leave it unset — the backfiller
+        // treats a missing cursor entry as a per-channel failure and skips this
+        // channel this run; cursor resolution is retried fresh next boot.
+        logger.error('failed to resolve backfill cursor, skipping this channel this run', {
+          channelId: channel.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  } else {
+    logger.info('backfill disabled — skipping historical backfill');
+  }
+
   logger.info(
     'MessageContent is a privileged intent — it must be enabled in the Discord Developer Portal',
   );
 
   const client = createDiscordClient(logger, config.discord.guild_id);
+  // AC-4 (Story 3.2): observability for REST 429s. discord.js itself queues and
+  // waits out rate limits (Retry-After honored by default) — this is a log, not
+  // a recovery mechanism. Bound once per process, here only.
+  client.rest.on('rateLimited', (info) => {
+    logger.warn('Discord REST rate limited', {
+      route: info.route,
+      timeToReset: info.timeToReset,
+    });
+  });
   bindGatewayEvents(client, logger);
   client.on(Events.MessageCreate, (message) => {
     // handleMessageCreate never rejects (it catches persistence errors), but guard
@@ -87,6 +126,9 @@ async function main(): Promise<void> {
   // AC-5: SIGTERM/SIGINT → clean shutdown. Real consumer-group drain stays in Epic 6.
   const shutdownSignal = new AbortController();
   let shuttingDown = false;
+  // Tracks the in-flight backfill (if any) so shutdown can wait for it — bounded —
+  // BEFORE tearing down the db/redis/client connections it may still be using.
+  let backfillPromise: Promise<void> = Promise.resolve();
   const shutdown = (signal: string): void => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -94,6 +136,12 @@ async function main(): Promise<void> {
     logger.info(`received ${signal}, shutting down`);
     void (async () => {
       try {
+        // Give the aborted backfill a bounded moment to stop touching db/redis/client
+        // before those connections start closing underneath it.
+        await Promise.race([
+          backfillPromise,
+          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+        ]);
         // Bound destroy() too — a hung/half-open Gateway socket must not block the exit.
         await Promise.race([
           client.destroy(),
@@ -134,6 +182,29 @@ async function main(): Promise<void> {
     logger,
     signal: shutdownSignal.signal,
   });
+
+  // Story 3.2: historical backfill, fired once per process after the FIRST
+  // successful login (connectWithRetry resolves exactly once; later Gateway
+  // reconnects are discord.js-internal and never re-run this). Non-blocking —
+  // live ingestion runs concurrently and overlaps are absorbed by the idempotent
+  // persistMessage. A whole-run failure is logged, never an unhandledRejection.
+  // NOTE: per-channel and completed-event XADD errors are handled inside
+  // runBackfill itself; this catch is for unexpected structural failures only.
+  if (config.discord.backfill.enabled) {
+    backfillPromise = runBackfill({
+      client,
+      config,
+      db,
+      redis,
+      logger,
+      cursors: backfillCursors,
+      signal: shutdownSignal.signal,
+    }).catch((error: unknown) => {
+      logger.error('unexpected backfill failure', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 }
 
 main().catch((error: unknown) => {
