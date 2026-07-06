@@ -123,7 +123,7 @@ graph TD
 | `hivly:discord:messages` | bot | `hivly:indexer` | workers/indexer |
 | `hivly:discord:messages:updated` | bot | `hivly:sync` | workers/sync |
 | `hivly:discord:messages:deleted` | bot | `hivly:sync` | workers/sync |
-| `hivly:knowledge:events` *(planned — Epic 6)* | workers/bot | `hivly:notifier` | notifier *(deferred)* |
+| `hivly:knowledge:events` | bot (desde 3.2: `discord.backfill.completed`); workers *(Epic 6)* | `hivly:notifier` | notifier *(deferred — Epic 6)* |
 
 Campos mínimos obligatorios en cada mensaje de stream: `messageId` (snowflake string), `channelId` (string), `guildId` (string), `timestamp` (ISO 8601). Los tipos de evento están definidos en `packages/shared/src/types/events.ts`. Los Workers hacen ACK (`XACK`) solo tras procesar con éxito; no hacen ACK si el procesamiento falla (permite reintento automático por otro consumer del mismo group).
 

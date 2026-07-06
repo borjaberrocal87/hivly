@@ -789,7 +789,7 @@ Stream keys and consumer groups are invariants (AD-13):
 | `hivly:discord:messages` | bot | `hivly:indexer` | workers/indexer |
 | `hivly:discord:messages:updated` | bot | `hivly:sync` | workers/sync |
 | `hivly:discord:messages:deleted` | bot | `hivly:sync` | workers/sync |
-| `hivly:knowledge:events` *(planned — Epic 6)* | bot/workers | `hivly:notifier` | notifier *(deferred)* |
+| `hivly:knowledge:events` | bot (since 3.2: `discord.backfill.completed`); workers *(Epic 6)* | `hivly:notifier` | notifier *(deferred — Epic 6)* |
 
 Rules:
 - Event types are defined in `packages/shared/src/types/events.ts`; every message carries at least `messageId`, `channelId`, `guildId`, `timestamp` (ISO 8601).
