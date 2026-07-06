@@ -35,16 +35,18 @@ export type DiscordStreamEvent =
 /**
  * Emitted once per bot boot after the historical backfill has attempted every
  * enabled channel (even when some failed). NOT message-scoped, so it does not
- * extend StreamEvent. Counts are numbers here; producers stringify every field
- * on XADD (AD-13 — all stream values are strings).
+ * extend StreamEvent. All fields are strings — AD-13 requires every stream
+ * value to be a string.
  */
 export interface BackfillCompletedEvent {
   type: 'discord.backfill.completed';
   guildId: string; // Discord snowflake
   timestamp: string; // ISO 8601 UTC
-  channelsProcessed: number;
-  channelsFailed: number;
-  messagesPublished: number;
+  channelsProcessed: string;
+  channelsFailed: string;
+  messagesPublished: string;
+  /** Messages that exhausted every persist retry and were permanently skipped. */
+  messagesFailed: string;
 }
 
 /** Events on KNOWLEDGE_EVENTS — a union so Epic 6 can grow it without churn. */

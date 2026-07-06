@@ -159,6 +159,28 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/embeddings.*base_url|base_url.*embeddings/);
   });
 
+  it('should reject two ENABLED channels sharing the same id', () => {
+    const yaml = VALID_YAML.replace(
+      '  channels:\n    - id: "1234567890"\n      name: "general"\n      enabled: true\n',
+      '  channels:\n    - id: "1234567890"\n      name: "general"\n      enabled: true\n' +
+        '    - id: "1234567890"\n      name: "general-2"\n      enabled: true\n',
+    );
+    const path = writeFixture('dup-channel-enabled.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/duplicate.*id|id.*duplicate/i);
+  });
+
+  it('should accept two DISABLED channels sharing the same id (no runtime effect)', () => {
+    const yaml = VALID_YAML.replace(
+      '  channels:\n    - id: "1234567890"\n      name: "general"\n      enabled: true\n',
+      '  channels:\n    - id: "1234567890"\n      name: "general"\n      enabled: false\n' +
+        '    - id: "1234567890"\n      name: "general-2"\n      enabled: false\n',
+    );
+    const path = writeFixture('dup-channel-disabled.yml', yaml);
+
+    expect(() => loadConfig(path)).not.toThrow();
+  });
+
   it('should accept provider "custom" when base_url is present', () => {
     const yaml = VALID_YAML.replace(
       'provider: "openai"\n  model: "text-embedding-3-small"',

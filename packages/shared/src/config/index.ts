@@ -38,7 +38,7 @@ export const HivlyConfigSchema = z.object({
     channels: z.array(ChannelSchema),
     backfill: z.object({
       enabled: z.boolean(),
-      limit: z.number(),
+      limit: z.number().int().positive().max(100_000),
       ignore_bots: z.boolean(),
     }),
   }),
@@ -116,6 +116,24 @@ export const HivlyConfigSchema = z.object({
       });
     }
   }
+
+  // A duplicated ENABLED channel id (copy-paste error) would backfill the same
+  // channel twice per boot; onConflictDoNothing absorbs the duplicate rows/events,
+  // but channelsProcessed in the completed event would still double-count. Two
+  // DISABLED entries sharing an id are harmless — both the cursor-resolution loop
+  // and runBackfill already skip disabled channels — so don't reject those.
+  const seenChannelIds = new Set<string>();
+  config.discord.channels.forEach((channel, index) => {
+    if (!channel.enabled) return;
+    if (seenChannelIds.has(channel.id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['discord', 'channels', index, 'id'],
+        message: `discord.channels contains a duplicate ENABLED id "${channel.id}"`,
+      });
+    }
+    seenChannelIds.add(channel.id);
+  });
 });
 
 export type HivlyConfig = z.infer<typeof HivlyConfigSchema>;
