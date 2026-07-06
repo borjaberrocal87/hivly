@@ -42,6 +42,7 @@
 
 generated: 2026-06-30
 last_updated: 2026-07-06
+# epic-3 → done + epic-3-retrospective → done (bmad-retrospective 2026-07-06; epic-3-retro-2026-07-06.md). 4/4 stories done; FR5 closed; unblocks Epic 4. 5 action items recorded. Borja: review was a valuable safety net; Epic 4 discoveries handled as design notes for Story 4.1 (no dedicated design session).
 # story 3-3 → done (code review round 2, fresh adversarial pass over the 8 round-1 patches, 2026-07-06 — 0 decisions + 6 more patches: RawStreamEntry.message type widened to admit null; chunk_size upper-bound cap added (mirrors grouping_window); Redis-connect-timeout exit(1) now guarded against a concurrent shutdown; shutdown's swallowed indexerPromise rejection now logged instead of silently discarded; both size caps now warn once at boot instead of clamping silently; test-coverage nits fixed (misleading comment, window-cap boundary, 3x-duplicate). Several round-1-reviewer claims verified as false positives and dismissed (a theoretical TDZ crash, a NaN-clamp concern, a boot-time client-teardown race) — none reproduced against real process/promise semantics. Gate green: lint 0 / 213 unit / 22 integration / build clean)
 # story 3-3 → done (code review 2026-07-06 — 0 decisions + 8 patches applied: dedup duplicate messageId before grouping to stop a cross-window chunk_key collision from silently overwriting already-embedded content; null-message guard for tombstoned PEL entries (was an infinite crash loop); chunk_overlap/chunk_size clamped before the splitter; embedder vector/chunk count-mismatch guard; SIGTERM/SIGINT + uncaught handlers moved before all long-running boot work; shutdown no longer races an unguarded indexerPromise rejection; per-stage failure logging (chunk/embed/persist); grouping_window capped at 50; 6 new regression tests; 5 dismissed as noise; gate green: lint 0 / 209 unit / 22 integration / build clean)
 # story 3-3 → review (bmad-dev-story 2026-07-06 — gate green: lint 0, 203 unit, build 5 clean, 22 integration; real-endpoint smoke: #general event → 1536-dim embeddings row + chunk_key + indexed_at stamped + XPENDING 0; redelivery deduped, count unchanged. Schema chunk_key + migration 0002 (spike-confirmed 1536); PEL-as-DLQ decision recorded)
@@ -103,12 +104,12 @@ development_status:
   epic-2-retrospective: done
 
   # ── Épico 3: Pipeline de Indexación de Conocimiento ─────────────────────────
-  epic-3: in-progress
+  epic-3: done
   3-0-config-proveedores-llm-y-embeddings: done
   3-1-discord-bot-conexion-al-gateway-y-listener-messagecreate: done
   3-2-discord-bot-backfill-historico-con-reconciliacion-por-snowflake: done
   3-3-workers-indexer-embeddings-y-pgvector: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # ── Épico 4: Búsqueda, Documentos y Read Tracking ───────────────────────────
   epic-4: backlog
@@ -154,16 +155,36 @@ action_items:
   - epic: 2
     action: "Early validation spike of Epic 3's two external integrations — real smoke of the discord.js Gateway (connect, receive one messageCreate) and the embeddings API (one real call, verify 1536-dim vector) BEFORE building 3.1/3.3 logic on top. Addresses the ioredis-class late-validation risk."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 2
     action: "Carry the integration-test discipline into the pipeline — tests against real Redis Streams (consumer group, XREADGROUP, XACK only after success) and real pgvector (idempotent UPSERT, AD-13). Part of the definition-of-done for 3.1 and 3.3."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 2
     action: "Pull minimum hardening forward into Epic 3 — uncaughtException/unhandledRejection + reconnect-with-backoff in bot and workers, inside 3.1/3.3 (real graceful shutdown stays Epic 6)."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 2
     action: "Carried deferred debt (non-blocking): prefers-reduced-motion for the six kh-* keyframes (from 2.1) — if Epic 3 adds any pipeline-UI animation, remember it is still open; useTheme setState side-effects + concurrent-login guard (2.2); Discord 429 retry + log redaction (2.3); access_control.enabled/allow-policy branch (Epic 4+). Tracked in deferred-work.md."
     owner: "Amelia (Dev)"
+    status: open
+  - epic: 3
+    action: "Treat every code-review patch as new, un-reviewed code — the next independent pass verifies prior patches with the same rigor as the original code; a patch is not done until an independent pass confirms it. (Epic 3 had 10 review passes; several defects were introduced by prior passes' patches and caught only by the next pass.)"
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 3
+    action: "Fix the deleted_at exclusion semantics over grouped chunks — JOIN embeddings -> discord_messages via message_ids, and decide exclude-if-any-message-deleted vs exclude-if-all. Resolve when creating Story 4.1 (design note, not a blocker)."
+    owner: "Winston + Amelia"
+    status: open
+  - epic: 3
+    action: "Fix the view-in-Discord link convention for grouped chunks — which messageId of the group is linked (candidate: the one anchoring chunk_key). Before Story 4.3."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 3
+    action: "Stream trimming / retention for hivly:discord:messages — no MAXLEN today, unbounded growth; a future story must decide the cap and confirm it cannot trim entries still pending in any group PEL. Stays deferred to Epic 6, tracked."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 3
+    action: "Transactional outbox — would fix both the XADD-before-COMMIT window and the pg-connection-held-across-XADD pool risk. Architectural, deferred; revisit when the race/pool pressure is observed."
+    owner: "Winston"
     status: open
