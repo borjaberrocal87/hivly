@@ -18,6 +18,23 @@ const banSiblingServices = (self) => ({
   },
 });
 
+// AD-11: no legacy LangChain APIs — the RAG agent is a LangGraph StateGraph.
+// Folded into the same object as the sibling-service ban (not a separate flat-config
+// entry) because a later object setting `no-restricted-imports` for backend files
+// would clobber this whole option, silently dropping the sibling-import ban.
+const LANGCHAIN_LEGACY_BAN = {
+  group: ['langchain/chains', 'langchain/chains/**', 'langchain/memory', 'langchain/memory/**'],
+  message:
+    'Legacy LangChain APIs are banned (AD-11): use the LangGraph StateGraph, not langchain/chains or langchain/memory.',
+};
+
+const banBackendLegacyImports = {
+  files: ['packages/backend/**/*.{ts,tsx}'],
+  rules: {
+    'no-restricted-imports': ['error', { patterns: [SIBLING_IMPORT_BAN, LANGCHAIN_LEGACY_BAN] }],
+  },
+};
+
 // @hivly/web is a browser bundle (AD-3). It must import ONLY browser-safe
 // @hivly/shared entrypoints: `/schemas` (zod only) and `/types/events` (pure types).
 // The root barrel and `/db` re-export the Drizzle client and pull `pg` + Node
@@ -65,7 +82,7 @@ export default tseslint.config(
   },
   ...tseslint.configs.recommended,
   banSiblingServices('bot'),
-  banSiblingServices('backend'),
+  banBackendLegacyImports,
   banSiblingServices('workers'),
   banNonBrowserSafeSharedInWeb,
 );

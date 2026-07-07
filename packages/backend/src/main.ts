@@ -7,6 +7,7 @@ import { createRedisClient } from '@hivly/shared/redis';
 
 import { createApp } from './app.js';
 import { createDrizzleChannelPermissionRepository } from './infrastructure/channelPermissionRepository.drizzle.js';
+import { createLangchainChatModel } from './infrastructure/chatModel.langchain.js';
 import { createLangchainQueryEmbedder } from './infrastructure/queryEmbedder.langchain.js';
 import { materializeChannelPermissions } from './infrastructure/materializeChannelPermissions.js';
 
@@ -61,6 +62,11 @@ async function main(): Promise<void> {
   // behind this adapter). No network I/O at construction. GET /api/search uses it.
   const queryEmbedder = createLangchainQueryEmbedder(config.embeddings);
 
+  // Build the RAG agent's chat model from validated config (same LangChain
+  // boundary as the query embedder). No network I/O at construction. POST
+  // /api/chat uses it.
+  const chatModel = createLangchainChatModel(config.agent);
+
   const app = createApp(db, redis, {
     sessionSecret,
     sessionTtlDays,
@@ -74,6 +80,8 @@ async function main(): Promise<void> {
     frontendUrl,
     allowedOrigins: config.security.allowed_origins,
     queryEmbedder,
+    chatModel,
+    agentMemoryWindow: config.agent.memory_window,
   });
 
   const server = app.listen(PORT, '0.0.0.0', () => {
