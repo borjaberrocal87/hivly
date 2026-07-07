@@ -4,6 +4,7 @@
 import { createDatabase, type Database } from '@hivly/shared/db';
 
 import type { AppOptions } from './app.js';
+import type { ChatModel } from './domain/repositories/chatModel.js';
 import type { QueryEmbedder } from './domain/repositories/queryEmbedder.js';
 import { createRedisClient, type RedisClient } from '@hivly/shared/redis';
 
@@ -22,6 +23,20 @@ export function fakeQueryEmbedder(index = 0): QueryEmbedder {
       const v = new Array<number>(TEST_EMBEDDING_DIMENSIONS).fill(0);
       v[index] = 1;
       return v;
+    },
+  };
+}
+
+/**
+ * Deterministic fake chat model for integration tests / the e2e harness — streams
+ * a fixed token list. Never hits a real LLM endpoint (mirrors fakeQueryEmbedder).
+ * This is what makes `/api/chat` live in every integration test AND the
+ * Playwright harness backend without a real provider (AC11).
+ */
+export function fakeChatModel(tokens: string[] = ['Hola', ' desde', ' Hivly', '.']): ChatModel {
+  return {
+    async *stream() {
+      for (const token of tokens) yield token;
     },
   };
 }
@@ -71,6 +86,8 @@ export function buildTestAppOptions(overrides: Partial<AppOptions> = {}): AppOpt
     allowedOrigins: ['http://localhost:5173'],
     // Deterministic fake so tests never hit a real embeddings endpoint. Overridable.
     queryEmbedder: fakeQueryEmbedder(),
+    // Deterministic fake so tests never hit a real LLM endpoint. Overridable.
+    chatModel: fakeChatModel(),
     ...overrides,
   };
 }
