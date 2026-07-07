@@ -177,4 +177,42 @@ describe('GET /api/documents (integration)', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ results: [], page: 1, limit: 20, total: 0 });
   });
+
+  it('should return only unread fragments when unreadOnly=true (AC9)', async () => {
+    const app = createApp(clients.db, clients.redis, buildTestAppOptions({ oauth: memberOAuth([ROLE_MEMBER]) }));
+    const agent = request.agent(app);
+    await loginMember(agent);
+
+    const before = await agent.get('/api/documents?limit=100');
+    const fragA = before.body.results.find((r: { messageId: string }) => r.messageId === `${suffix}-a`);
+    await agent.post(`/api/read-status/${fragA.id}`);
+
+    const res = await agent.get('/api/documents?unreadOnly=true&limit=100');
+
+    expect(res.status).toBe(200);
+    const messageIds = res.body.results.map((r: { messageId: string }) => r.messageId);
+    expect(messageIds).not.toContain(`${suffix}-a`);
+  });
+
+  it('should narrow the page to one channel via channelId (AC9)', async () => {
+    const app = createApp(clients.db, clients.redis, buildTestAppOptions({ oauth: memberOAuth([ROLE_MEMBER]) }));
+    const agent = request.agent(app);
+    await loginMember(agent);
+
+    const res = await agent.get(`/api/documents?channelId=${CH_ALLOWED}&limit=100`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.results.every((r: { channelId: string }) => r.channelId === CH_ALLOWED)).toBe(true);
+  });
+
+  it('should return an empty page for a channelId outside the caller scope — no existence leak (AC9)', async () => {
+    const app = createApp(clients.db, clients.redis, buildTestAppOptions({ oauth: memberOAuth([ROLE_MEMBER]) }));
+    const agent = request.agent(app);
+    await loginMember(agent);
+
+    const res = await agent.get(`/api/documents?channelId=${CH_DENIED}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ results: [], page: 1, limit: 20, total: 0 });
+  });
 });

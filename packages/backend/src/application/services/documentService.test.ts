@@ -31,27 +31,27 @@ describe('documentService.listDocuments', () => {
     const documentRepo = fakeRepo([], 0);
     const service = createDocumentService({ documentRepo });
 
-    const result = await service.listDocuments('user-1', 1, 20, []);
+    const result = await service.listDocuments('user-1', 1, 20, [], undefined, false);
 
     expect(result).toEqual({ results: [], page: 1, limit: 20, total: 0 });
     expect(documentRepo.listDocuments).not.toHaveBeenCalled();
     expect(documentRepo.countDocuments).not.toHaveBeenCalled();
   });
 
-  it('should compute the offset from page/limit and pass the scope through', async () => {
+  it('should compute the offset from page/limit and pass the scope + unreadOnly through', async () => {
     const documentRepo = fakeRepo([ROW], 1);
     const service = createDocumentService({ documentRepo });
 
-    await service.listDocuments('user-1', 3, 10, ['chan-1']);
+    await service.listDocuments('user-1', 3, 10, ['chan-1'], undefined, false);
 
-    expect(documentRepo.listDocuments).toHaveBeenCalledWith('user-1', ['chan-1'], 10, 20);
-    expect(documentRepo.countDocuments).toHaveBeenCalledWith(['chan-1']);
+    expect(documentRepo.listDocuments).toHaveBeenCalledWith('user-1', ['chan-1'], 10, 20, false);
+    expect(documentRepo.countDocuments).toHaveBeenCalledWith('user-1', ['chan-1'], false);
   });
 
   it('should map rows to fragments preserving isRead and indexedAt (D3)', async () => {
     const service = createDocumentService({ documentRepo: fakeRepo([ROW], 1) });
 
-    const { results } = await service.listDocuments('user-1', 1, 20, ['chan-1']);
+    const { results } = await service.listDocuments('user-1', 1, 20, ['chan-1'], undefined, false);
 
     expect(results[0]).toEqual({
       id: ROW.id,
@@ -70,7 +70,7 @@ describe('documentService.listDocuments', () => {
   it('should return the total from the repo (D4)', async () => {
     const service = createDocumentService({ documentRepo: fakeRepo([ROW], 42) });
 
-    const { total } = await service.listDocuments('user-1', 1, 20, ['chan-1']);
+    const { total } = await service.listDocuments('user-1', 1, 20, ['chan-1'], undefined, false);
 
     expect(total).toBe(42);
   });
@@ -79,6 +79,39 @@ describe('documentService.listDocuments', () => {
     const badRow = { ...ROW, id: 'not-a-uuid' };
     const service = createDocumentService({ documentRepo: fakeRepo([badRow], 1) });
 
-    await expect(service.listDocuments('user-1', 1, 20, ['chan-1'])).rejects.toThrow();
+    await expect(
+      service.listDocuments('user-1', 1, 20, ['chan-1'], undefined, false),
+    ).rejects.toThrow();
+  });
+
+  it('should narrow the scope to [channelId] when channelId is inside allowedChannelIds (AD-12)', async () => {
+    const documentRepo = fakeRepo([ROW], 1);
+    const service = createDocumentService({ documentRepo });
+
+    await service.listDocuments('user-1', 1, 20, ['chan-1', 'chan-2'], 'chan-1', false);
+
+    expect(documentRepo.listDocuments).toHaveBeenCalledWith('user-1', ['chan-1'], 20, 0, false);
+    expect(documentRepo.countDocuments).toHaveBeenCalledWith('user-1', ['chan-1'], false);
+  });
+
+  it('should return an empty page WITHOUT calling the repo when channelId is out of scope (no existence leak)', async () => {
+    const documentRepo = fakeRepo([ROW], 1);
+    const service = createDocumentService({ documentRepo });
+
+    const result = await service.listDocuments('user-1', 1, 20, ['chan-1'], 'chan-unknown', false);
+
+    expect(result).toEqual({ results: [], page: 1, limit: 20, total: 0 });
+    expect(documentRepo.listDocuments).not.toHaveBeenCalled();
+    expect(documentRepo.countDocuments).not.toHaveBeenCalled();
+  });
+
+  it('should forward unreadOnly=true to both repo methods', async () => {
+    const documentRepo = fakeRepo([ROW], 1);
+    const service = createDocumentService({ documentRepo });
+
+    await service.listDocuments('user-1', 1, 20, ['chan-1'], undefined, true);
+
+    expect(documentRepo.listDocuments).toHaveBeenCalledWith('user-1', ['chan-1'], 20, 0, true);
+    expect(documentRepo.countDocuments).toHaveBeenCalledWith('user-1', ['chan-1'], true);
   });
 });

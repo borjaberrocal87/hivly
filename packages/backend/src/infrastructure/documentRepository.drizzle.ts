@@ -18,6 +18,7 @@ export function createDrizzleDocumentRepository(db: Database): DocumentRepositor
       allowedChannelIds: string[],
       limit: number,
       offset: number,
+      unreadOnly: boolean,
     ): Promise<DocumentFragmentRow[]> {
       // AC7 / deny-by-default: never build `= ANY('{}')`. Short-circuit BEFORE any
       // DB round-trip — an empty array in inArray/ANY is unsafe (db/index.ts).
@@ -48,6 +49,7 @@ export function createDrizzleDocumentRepository(db: Database): DocumentRepositor
             SELECT 1 FROM discord_messages d
             WHERE d.id = ANY(e.message_ids) AND d.deleted_at IS NOT NULL
           )
+          ${unreadOnly ? sql`AND urs.embedding_id IS NULL` : sql``}
         ORDER BY e.created_at DESC, e.id DESC                       -- D4: newest indexed first, stable tiebreak
         LIMIT ${limit} OFFSET ${offset}
       `);
@@ -69,17 +71,23 @@ export function createDrizzleDocumentRepository(db: Database): DocumentRepositor
       });
     },
 
-    async countDocuments(allowedChannelIds: string[]): Promise<number> {
+    async countDocuments(
+      userId: string,
+      allowedChannelIds: string[],
+      unreadOnly: boolean,
+    ): Promise<number> {
       if (allowedChannelIds.length === 0) return 0;
 
       const result = await db.execute(sql`
         SELECT count(*)::int AS "total"
         FROM embeddings e
+        LEFT JOIN user_read_status urs ON urs.embedding_id = e.id AND urs.user_id = ${userId}
         WHERE ${inArray(sql`e.channel_id`, allowedChannelIds)}
           AND NOT EXISTS (
             SELECT 1 FROM discord_messages d
             WHERE d.id = ANY(e.message_ids) AND d.deleted_at IS NOT NULL
           )
+          ${unreadOnly ? sql`AND urs.embedding_id IS NULL` : sql``}
       `);
 
       const row = result.rows[0] as Record<string, unknown> | undefined;

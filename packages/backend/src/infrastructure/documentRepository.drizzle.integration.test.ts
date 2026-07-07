@@ -86,7 +86,7 @@ describe('DocumentRepository (integration, real Postgres)', () => {
   it('should return only fragments inside allowedChannelIds — RBAC beats listing (AC7)', async () => {
     const repo = createDrizzleDocumentRepository(clients.db);
 
-    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0);
+    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0, false);
 
     expect(rows.map((r) => r.channelId)).not.toContain(CH_DENIED);
     expect(rows.map((r) => r.messageId)).not.toContain(`${suffix}-c`);
@@ -95,7 +95,7 @@ describe('DocumentRepository (integration, real Postgres)', () => {
   it('should exclude a chunk whose group contains any soft-deleted message (D1)', async () => {
     const repo = createDrizzleDocumentRepository(clients.db);
 
-    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0);
+    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0, false);
 
     expect(rows.map((r) => r.messageId)).not.toContain(`${suffix}-d`);
   });
@@ -103,7 +103,7 @@ describe('DocumentRepository (integration, real Postgres)', () => {
   it('should mark exactly the pre-seeded fragment as isRead:true (AC1.3)', async () => {
     const repo = createDrizzleDocumentRepository(clients.db);
 
-    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0);
+    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0, false);
 
     const fragA = rows.find((r) => r.messageId === `${suffix}-a`);
     const fragB = rows.find((r) => r.messageId === `${suffix}-b`);
@@ -114,8 +114,8 @@ describe('DocumentRepository (integration, real Postgres)', () => {
   it('should order by created_at DESC, id DESC and paginate (D4)', async () => {
     const repo = createDrizzleDocumentRepository(clients.db);
 
-    const page1 = await repo.listDocuments(userId, [CH_ALLOWED], 1, 0);
-    const page2 = await repo.listDocuments(userId, [CH_ALLOWED], 1, 1);
+    const page1 = await repo.listDocuments(userId, [CH_ALLOWED], 1, 0, false);
+    const page2 = await repo.listDocuments(userId, [CH_ALLOWED], 1, 1, false);
 
     expect(page1).toHaveLength(1);
     expect(page2).toHaveLength(1);
@@ -125,7 +125,7 @@ describe('DocumentRepository (integration, real Postgres)', () => {
   it('should count only visible fragments matching D1 + RBAC (D4 total)', async () => {
     const repo = createDrizzleDocumentRepository(clients.db);
 
-    const total = await repo.countDocuments([CH_ALLOWED]);
+    const total = await repo.countDocuments(userId, [CH_ALLOWED], false);
 
     // A and B survive; D excluded by D1; C is out of scope.
     expect(total).toBe(2);
@@ -134,7 +134,29 @@ describe('DocumentRepository (integration, real Postgres)', () => {
   it('should return [] / 0 without touching the DB when the scope is empty (AC7)', async () => {
     const repo = createDrizzleDocumentRepository(clients.db);
 
-    expect(await repo.listDocuments(userId, [], 10, 0)).toEqual([]);
-    expect(await repo.countDocuments([])).toBe(0);
+    expect(await repo.listDocuments(userId, [], 10, 0, false)).toEqual([]);
+    expect(await repo.countDocuments(userId, [], false)).toBe(0);
+  });
+
+  it('should return only unread fragments when unreadOnly=true, with a matching count (AC9)', async () => {
+    const repo = createDrizzleDocumentRepository(clients.db);
+
+    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0, true);
+    const total = await repo.countDocuments(userId, [CH_ALLOWED], true);
+
+    // A is pre-seeded as read; only B remains unread.
+    expect(rows.map((r) => r.messageId)).not.toContain(`${suffix}-a`);
+    expect(rows.map((r) => r.messageId)).toContain(`${suffix}-b`);
+    expect(total).toBe(1);
+  });
+
+  it('should narrow to a single channel when allowedChannelIds is [channelId] (AC9 channelId narrowing)', async () => {
+    const repo = createDrizzleDocumentRepository(clients.db);
+
+    const rows = await repo.listDocuments(userId, [CH_ALLOWED], 10, 0, false);
+    const total = await repo.countDocuments(userId, [CH_ALLOWED], false);
+
+    expect(rows.every((r) => r.channelId === CH_ALLOWED)).toBe(true);
+    expect(total).toBe(2);
   });
 });

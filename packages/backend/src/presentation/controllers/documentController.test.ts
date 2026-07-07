@@ -64,7 +64,7 @@ describe('documentController.list', () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe(payload);
-    expect(listDocuments).toHaveBeenCalledWith('user-1', 1, 20, ['chan-1']);
+    expect(listDocuments).toHaveBeenCalledWith('user-1', 1, 20, ['chan-1'], undefined, false);
   });
 
   it('should default the scope to [] when the RBAC middleware left it unset', async () => {
@@ -74,7 +74,17 @@ describe('documentController.list', () => {
 
     await controller.list(fakeReq({}), res);
 
-    expect(listDocuments).toHaveBeenCalledWith('user-1', 1, 20, []);
+    expect(listDocuments).toHaveBeenCalledWith('user-1', 1, 20, [], undefined, false);
+  });
+
+  it('should pass channelId and unreadOnly through to the service', async () => {
+    const listDocuments = vi.fn(async () => ({ results: [], page: 1, limit: 20, total: 0 }));
+    const controller = createDocumentController({ documentService: stubService(listDocuments) });
+    const res = fakeRes();
+
+    await controller.list(fakeReq({ channelId: 'chan-1', unreadOnly: 'true' }, ['chan-1']), res);
+
+    expect(listDocuments).toHaveBeenCalledWith('user-1', 1, 20, ['chan-1'], 'chan-1', true);
   });
 
   it('should map a service error to 500 INTERNAL without leaking it', async () => {
