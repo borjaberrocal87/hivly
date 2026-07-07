@@ -51,5 +51,21 @@ export function createDrizzleChannelPermissionRepository(
 
       return rows.map((r) => r.channelId);
     },
+
+    async findAllowedChannels(discordRoles: string[]): Promise<{ id: string; name: string }[]> {
+      // Short-circuit: an empty JS array in the `&&` overlap operator risks a
+      // Postgres cast ambiguity, and the deny-by-default result is trivially [].
+      if (discordRoles.length === 0) return [];
+
+      const rows = await db
+        .select({ id: channelPermissions.channelId, name: channelPermissions.name })
+        .from(channelPermissions)
+        // AD-12 expansion: WHERE allowed_roles && :discordRoles (array overlap).
+        .where(arrayOverlaps(channelPermissions.allowedRoles, discordRoles))
+        // Deterministic chip order across requests/deploys (bare column = ascending).
+        .orderBy(channelPermissions.name);
+
+      return rows;
+    },
   };
 }

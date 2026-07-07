@@ -26,10 +26,12 @@ import { createDrizzleUserRepository } from './infrastructure/userRepository.dri
 import { createRbacMiddleware } from './middleware/rbac.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { createAuthController } from './presentation/controllers/authController.js';
+import { createChannelsController } from './presentation/controllers/channelsController.js';
 import { createDocumentController } from './presentation/controllers/documentController.js';
 import { createReadStatusController } from './presentation/controllers/readStatusController.js';
 import { createSearchController } from './presentation/controllers/searchController.js';
 import { createAuthRouter } from './routes/authRoutes.js';
+import { createChannelsRouter } from './routes/channelsRoutes.js';
 import { createDocumentRouter } from './routes/documentRoutes.js';
 import { createReadStatusRouter } from './routes/readStatusRoutes.js';
 import { createSearchRouter } from './routes/searchRoutes.js';
@@ -122,6 +124,11 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
   const readStatusService = createReadStatusService({ readStatusRepo });
   const readStatusController = createReadStatusController({ readStatusService });
   app.use('/api/read-status', createReadStatusRouter(readStatusController));
+
+  // Channels (Epic 4, Story 4.3). Registered AFTER the /api gate, so it inherits
+  // requireAuth + the RBAC middleware — reuses the rbacService built above.
+  const channelsController = createChannelsController({ rbacService });
+  app.use('/api/channels', createChannelsRouter(channelsController));
 
   return app;
 }

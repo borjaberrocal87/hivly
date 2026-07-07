@@ -63,6 +63,7 @@ export function createAuthService(deps: {
         discordId: user.discordId,
         username: user.username,
         avatar: user.avatar,
+        guildId,
       });
     },
   };

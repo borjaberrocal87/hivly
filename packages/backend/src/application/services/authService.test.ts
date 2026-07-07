@@ -72,7 +72,7 @@ describe('authService.getMe', () => {
 
     const me = await service.getMe(profile.id);
 
-    expect(me).toEqual(profile);
+    expect(me).toEqual({ ...profile, guildId: GUILD_ID });
   });
 
   it('should return null when the session user no longer exists', async () => {

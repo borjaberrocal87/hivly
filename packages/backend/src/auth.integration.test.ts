@@ -112,6 +112,7 @@ describe('Auth endpoints (integration)', () => {
     const me = await agent.get('/api/auth/me');
     expect(me.status).toBe(200);
     expect(me.body.discordId).toBe(MEMBER_DISCORD_ID);
+    expect(me.body.guildId).toBe('test-guild');
     expect(AuthMeResponseSchema.safeParse(me.body).success).toBe(true);
 
     // Logout deletes the Redis key immediately and blocks /me afterwards.
