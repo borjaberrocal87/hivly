@@ -19,6 +19,7 @@ const PROFILE = {
   discordId: '123456789012345678',
   username: 'ada lovelace',
   avatar: null,
+  guildId: '111222333444555666',
 };
 
 afterEach(() => {

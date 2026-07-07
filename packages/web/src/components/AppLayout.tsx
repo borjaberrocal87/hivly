@@ -5,6 +5,7 @@
 import type { CSSProperties, ReactElement } from 'react';
 
 import { Header } from './Header';
+import { SearchView } from './SearchView';
 import { Sidebar, type Screen } from './Sidebar';
 import type { Theme } from '../hooks/useTheme';
 
@@ -17,6 +18,7 @@ interface AppLayoutProps {
   theme: Theme;
   onToggleTheme: () => void;
   onLogout: () => void;
+  guildId: string;
 }
 
 const shellStyle: CSSProperties = {
@@ -44,16 +46,10 @@ const contentAreaStyle: CSSProperties = {
   padding: '0 24px',
 };
 
-// Minimal placeholders — the real views arrive in Epic 4.
-const PLACEHOLDERS: Record<Screen, { title: string; description: string }> = {
-  search: {
-    title: 'Búsqueda de conocimiento',
-    description: 'La búsqueda semántica llega en el Épico 4.',
-  },
-  docs: {
-    title: 'Documentos indexados',
-    description: 'La vista de documentos y el read-tracking llegan en el Épico 4.',
-  },
+// Minimal placeholder — the real view arrives in Story 4.4.
+const DOCS_PLACEHOLDER = {
+  title: 'Documentos indexados',
+  description: 'La vista de documentos y el read-tracking llegan en el Épico 4.',
 };
 
 export function AppLayout({
@@ -65,9 +61,8 @@ export function AppLayout({
   theme,
   onToggleTheme,
   onLogout,
+  guildId,
 }: AppLayoutProps): ReactElement {
-  const placeholder = PLACEHOLDERS[activeScreen];
-
   return (
     <div style={shellStyle}>
       <Sidebar activeScreen={activeScreen} onNavigate={onNavigate} />
@@ -82,23 +77,27 @@ export function AppLayout({
           onLogout={onLogout}
         />
 
-        <main style={contentAreaStyle}>
-          <h2
-            style={{
-              fontFamily: "'Space Grotesk', sans-serif",
-              fontWeight: 700,
-              fontSize: 24,
-              letterSpacing: '-0.01em',
-              color: 'var(--text-primary)',
-              margin: 0,
-            }}
-          >
-            {placeholder.title}
-          </h2>
-          <p style={{ marginTop: 10, fontSize: 14, color: 'var(--text-muted)' }}>
-            {placeholder.description}
-          </p>
-        </main>
+        {activeScreen === 'search' ? (
+          <SearchView guildId={guildId} />
+        ) : (
+          <main style={contentAreaStyle}>
+            <h2
+              style={{
+                fontFamily: "'Space Grotesk', sans-serif",
+                fontWeight: 700,
+                fontSize: 24,
+                letterSpacing: '-0.01em',
+                color: 'var(--text-primary)',
+                margin: 0,
+              }}
+            >
+              {DOCS_PLACEHOLDER.title}
+            </h2>
+            <p style={{ marginTop: 10, fontSize: 14, color: 'var(--text-muted)' }}>
+              {DOCS_PLACEHOLDER.description}
+            </p>
+          </main>
+        )}
       </div>
     </div>
   );

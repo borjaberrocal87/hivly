@@ -60,3 +60,18 @@
   color: #ed4245;
   border-color: #ed4245;
 }
+
+/* Búsqueda view (Story 4.3). */
+.kh-search-input:focus {
+  border-color: var(--accent-ink);
+  box-shadow: 0 0 0 3px rgba(245, 166, 35, 0.12);
+}
+.kh-result-card:hover {
+  border-color: var(--border-hover);
+}
+.kh-chip:hover {
+  border-color: var(--border-hover);
+}
+.kh-discord-link:hover {
+  color: #5865f2;
+}
