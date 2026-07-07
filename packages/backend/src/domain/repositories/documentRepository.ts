@@ -33,18 +33,22 @@ export interface DocumentRepository {
    * contains a soft-deleted message (D1: exclude-if-any), and annotated with
    * `isRead` for `userId` via a LEFT JOIN against `user_read_status`. An empty
    * `allowedChannelIds` resolves to `[]` without touching the DB (deny-by-default;
-   * `ANY('{}')` is unsafe).
+   * `ANY('{}')` is unsafe). `unreadOnly` further restricts the page to fragments
+   * `userId` has not read (`urs.embedding_id IS NULL`).
    */
   listDocuments(
     userId: string,
     allowedChannelIds: string[],
     limit: number,
     offset: number,
+    unreadOnly: boolean,
   ): Promise<DocumentFragmentRow[]>;
 
   /**
    * Count of all visible fragments in scope (same RBAC + D1 filter as
    * `listDocuments`, no pagination) — used for the response `total` (D4).
+   * `userId` + `unreadOnly` mirror `listDocuments` so the count reflects the
+   * same unread filter.
    */
-  countDocuments(allowedChannelIds: string[]): Promise<number>;
+  countDocuments(userId: string, allowedChannelIds: string[], unreadOnly: boolean): Promise<number>;
 }

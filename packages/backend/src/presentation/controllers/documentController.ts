@@ -33,6 +33,8 @@ export function createDocumentController(deps: { documentService: DocumentServic
           parsed.data.page,
           parsed.data.limit,
           allowedChannelIds,
+          parsed.data.channelId,
+          parsed.data.unreadOnly,
         );
         res.status(200).json(payload);
       } catch (err) {

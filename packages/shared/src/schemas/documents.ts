@@ -7,10 +7,17 @@ import { z } from 'zod';
  * are coerced. `page` defaults to 1 (min 1); `limit` defaults to 20 (min 1, max 100).
  * `page` is capped (max 1_000_000) so a huge value can't overflow the Postgres `bigint`
  * OFFSET (`(page-1)*limit`) into a 500 — an out-of-range page yields a clean 400 instead.
+ * `channelId` narrows the page to one channel (AD-12, applied inside the query — never
+ * a post-filter); omitted means all allowed channels. `unreadOnly` restricts to fragments
+ * the caller has not read; it uses `z.stringbool()` rather than `z.coerce.boolean()`
+ * because `Boolean("false") === true` — coerce.boolean would wrongly parse `?unreadOnly=false`
+ * as `true`.
  */
 export const DocumentsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(1_000_000).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+  channelId: z.string().min(1).optional(),
+  unreadOnly: z.stringbool().default(false),
 });
 
 export type DocumentsQuery = z.infer<typeof DocumentsQuerySchema>;
