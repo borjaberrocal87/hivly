@@ -9,6 +9,7 @@ describe('AuthMeResponseSchema', () => {
       discordId: '123456789012345678',
       username: 'ada',
       avatar: 'a1b2c3',
+      guildId: '111222333444555666',
     });
     expect(result.success).toBe(true);
   });
@@ -19,6 +20,7 @@ describe('AuthMeResponseSchema', () => {
       discordId: '123456789012345678',
       username: 'ada',
       avatar: null,
+      guildId: '111222333444555666',
     });
     expect(result.success).toBe(true);
   });
@@ -29,6 +31,7 @@ describe('AuthMeResponseSchema', () => {
       discordId: '123456789012345678',
       username: 'ada',
       avatar: null,
+      guildId: '111222333444555666',
     });
     expect(result.success).toBe(false);
   });
@@ -36,6 +39,17 @@ describe('AuthMeResponseSchema', () => {
   it('should reject a profile when a required field is missing', () => {
     const result = AuthMeResponseSchema.safeParse({
       id: '550e8400-e29b-41d4-a716-446655440000',
+      username: 'ada',
+      avatar: null,
+      guildId: '111222333444555666',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('should reject a profile when guildId is missing', () => {
+    const result = AuthMeResponseSchema.safeParse({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      discordId: '123456789012345678',
       username: 'ada',
       avatar: null,
     });
