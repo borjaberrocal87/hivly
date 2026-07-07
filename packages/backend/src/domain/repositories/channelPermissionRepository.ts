@@ -26,4 +26,11 @@ export interface ChannelPermissionRepository {
    * Deny-by-default: no matching rule (or no roles) resolves to `[]`.
    */
   findAllowedChannelIds(discordRoles: string[]): Promise<string[]>;
+
+  /**
+   * Resolve the channels (id + name) a user with the given Discord roles may
+   * access — the rows whose `allowed_roles` overlap `discordRoles` (Postgres
+   * `&&`, AD-12). Deny-by-default: no matching rule (or no roles) resolves to `[]`.
+   */
+  findAllowedChannels(discordRoles: string[]): Promise<{ id: string; name: string }[]>;
 }

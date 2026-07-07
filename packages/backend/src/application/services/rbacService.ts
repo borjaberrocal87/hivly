@@ -6,7 +6,12 @@
 // This is the AD-12 RBAC *expansion* (roles → allowedChannelIds), NOT the vector-
 // query filter itself. Epic 4/5 handlers apply `req.allowedChannelIds` inside the
 // pgvector query; this story only produces it.
-import { AuthRolesResponseSchema, type AuthRolesResponse } from '@hivly/shared/schemas';
+import {
+  AuthRolesResponseSchema,
+  ChannelsResponseSchema,
+  type AuthRolesResponse,
+  type ChannelsResponse,
+} from '@hivly/shared/schemas';
 
 import type { ChannelPermissionRepository } from '../../domain/repositories/channelPermissionRepository.js';
 
@@ -16,6 +21,9 @@ export interface RbacService {
 
   /** Build the GET /api/auth/roles payload, validated against the shared contract. */
   getRolesResponse(discordRoles: string[]): Promise<AuthRolesResponse>;
+
+  /** Build the GET /api/channels payload, validated against the shared contract. */
+  getAllowedChannels(discordRoles: string[]): Promise<ChannelsResponse>;
 }
 
 export function createRbacService(deps: {
@@ -32,6 +40,12 @@ export function createRbacService(deps: {
       const allowedChannels = await channelPermissions.findAllowedChannelIds(discordRoles);
       // Validate against the shared contract before it leaves the service (AD-6).
       return AuthRolesResponseSchema.parse({ roles: discordRoles, allowedChannels });
+    },
+
+    async getAllowedChannels(discordRoles: string[]): Promise<ChannelsResponse> {
+      const channels = await channelPermissions.findAllowedChannels(discordRoles);
+      // Validate against the shared contract before it leaves the service (AD-6).
+      return ChannelsResponseSchema.parse({ channels });
     },
   };
 }

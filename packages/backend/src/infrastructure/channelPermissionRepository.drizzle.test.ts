@@ -27,4 +27,14 @@ describe('createDrizzleChannelPermissionRepository', () => {
 
     expect(insert).not.toHaveBeenCalled();
   });
+
+  it('should short-circuit findAllowedChannels to [] for empty roles WITHOUT touching the db', async () => {
+    const select = vi.fn();
+    const repo = createDrizzleChannelPermissionRepository({ select } as unknown as Database);
+
+    const result = await repo.findAllowedChannels([]);
+
+    expect(result).toEqual([]);
+    expect(select).not.toHaveBeenCalled();
+  });
 });

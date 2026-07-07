@@ -94,6 +94,7 @@ export function App(): ReactElement {
       theme={theme}
       onToggleTheme={toggleTheme}
       onLogout={logout}
+      guildId={user.guildId}
     />
   );
 }

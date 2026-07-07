@@ -9,6 +9,7 @@ export const AuthMeResponseSchema = z.object({
   discordId: z.string(),
   username: z.string(),
   avatar: z.string().nullable(),
+  guildId: z.string().min(1), // Discord guild snowflake; empty would break "ver en Discord" links.
 });
 
 export type AuthMeResponse = z.infer<typeof AuthMeResponseSchema>;

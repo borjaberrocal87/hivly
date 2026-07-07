@@ -23,6 +23,12 @@ function fakeRepo(rules: ChannelPermissionInput[]): ChannelPermissionRepository 
         .filter((r) => r.allowedRoles.some((role) => discordRoles.includes(role)))
         .map((r) => r.channelId);
     }),
+    findAllowedChannels: vi.fn(async (discordRoles: string[]) => {
+      if (discordRoles.length === 0) return [];
+      return rules
+        .filter((r) => r.allowedRoles.some((role) => discordRoles.includes(role)))
+        .map((r) => ({ id: r.channelId, name: r.name }));
+    }),
   };
 }
 
@@ -72,5 +78,29 @@ describe('rbacService.getRolesResponse', () => {
     const rbac = createRbacService({ channelPermissions: fakeRepo(RULES) });
 
     expect(await rbac.getRolesResponse([])).toEqual({ roles: [], allowedChannels: [] });
+  });
+});
+
+describe('rbacService.getAllowedChannels', () => {
+  it('should return the channels whose allowed_roles overlap the user roles', async () => {
+    const rbac = createRbacService({ channelPermissions: fakeRepo(RULES) });
+
+    const result = await rbac.getAllowedChannels(['member']);
+
+    expect(result).toEqual({ channels: [{ id: 'chan-general', name: 'general' }] });
+  });
+
+  it('should NOT return a channel when the user roles do not intersect its allowed_roles', async () => {
+    const rbac = createRbacService({ channelPermissions: fakeRepo(RULES) });
+
+    const result = await rbac.getAllowedChannels(['member']);
+
+    expect(result.channels.map((c) => c.id)).not.toContain('chan-admin');
+  });
+
+  it('should return an empty channels array for a user with no roles (deny-by-default)', async () => {
+    const rbac = createRbacService({ channelPermissions: fakeRepo(RULES) });
+
+    expect(await rbac.getAllowedChannels([])).toEqual({ channels: [] });
   });
 });
