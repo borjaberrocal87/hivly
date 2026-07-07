@@ -81,6 +81,14 @@ const stubService = (impl: Partial<ChatService>): ChatService => ({
   ...impl,
 }) as ChatService;
 
+// A resolved conversation as chatService returns it (carries timestamps since 5.2).
+const CONV = {
+  id: 'conv-1',
+  userId: 'user-1',
+  createdAt: '2026-07-06T00:00:00.000Z',
+  updatedAt: '2026-07-06T00:00:00.000Z',
+};
+
 describe('chatController.chat', () => {
   it('should return 400 VALIDATION_ERROR with the Spanish message when message is blank', async () => {
     const resolveConversation = vi.fn();
@@ -135,7 +143,7 @@ describe('chatController.chat', () => {
       { type: 'token', content: 'Hi' },
       { type: 'done', conversationId: 'conv-1' },
     ];
-    const resolveConversation = vi.fn(async () => ({ id: 'conv-1', userId: 'user-1' }));
+    const resolveConversation = vi.fn(async () => (CONV));
     const streamChat = vi.fn(async function* () {
       for (const frame of frames) yield frame;
     });
@@ -156,7 +164,7 @@ describe('chatController.chat', () => {
     ]);
     expect(res.ended).toBe(true);
     expect(streamChat).toHaveBeenCalledWith(
-      { id: 'conv-1', userId: 'user-1' },
+      CONV,
       'hi',
       ['chan-1'],
       expect.any(AbortSignal),
@@ -164,7 +172,7 @@ describe('chatController.chat', () => {
   });
 
   it('should emit a terminal error frame and end the response on a mid-stream failure', async () => {
-    const resolveConversation = vi.fn(async () => ({ id: 'conv-1', userId: 'user-1' }));
+    const resolveConversation = vi.fn(async () => (CONV));
     const streamChat = vi.fn(async function* (): AsyncGenerator<SSEFrame> {
       throw new Error('llm exploded: secret detail');
     });
@@ -184,7 +192,7 @@ describe('chatController.chat', () => {
   });
 
   it('should default the RBAC scope to [] when the middleware left it unset', async () => {
-    const resolveConversation = vi.fn(async () => ({ id: 'conv-1', userId: 'user-1' }));
+    const resolveConversation = vi.fn(async () => (CONV));
     const streamChat = vi.fn(async function* (): AsyncGenerator<SSEFrame> {
       yield { type: 'done', conversationId: 'conv-1' };
     });
@@ -196,7 +204,7 @@ describe('chatController.chat', () => {
     await controller.chat(fakeReq({ message: 'hi' }), res);
 
     expect(streamChat).toHaveBeenCalledWith(
-      { id: 'conv-1', userId: 'user-1' },
+      CONV,
       'hi',
       [],
       expect.any(AbortSignal),
@@ -204,7 +212,7 @@ describe('chatController.chat', () => {
   });
 
   it('should skip frame writes once the response socket is destroyed (client gone)', async () => {
-    const resolveConversation = vi.fn(async () => ({ id: 'conv-1', userId: 'user-1' }));
+    const resolveConversation = vi.fn(async () => (CONV));
     const streamChat = vi.fn(async function* (): AsyncGenerator<SSEFrame> {
       yield { type: 'token', content: 'Hi' };
       yield { type: 'done', conversationId: 'conv-1' };
@@ -223,7 +231,7 @@ describe('chatController.chat', () => {
   });
 
   it('should not throw when res.write throws synchronously (EPIPE race)', async () => {
-    const resolveConversation = vi.fn(async () => ({ id: 'conv-1', userId: 'user-1' }));
+    const resolveConversation = vi.fn(async () => (CONV));
     const streamChat = vi.fn(async function* (): AsyncGenerator<SSEFrame> {
       yield { type: 'token', content: 'Hi' };
       yield { type: 'done', conversationId: 'conv-1' };

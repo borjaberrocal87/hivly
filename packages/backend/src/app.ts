@@ -10,6 +10,7 @@ import express, { type Express } from 'express';
 import { createRagAgent } from './agent/graph.js';
 import { createAuthService } from './application/services/authService.js';
 import { createChatService } from './application/services/chatService.js';
+import { createConversationService } from './application/services/conversationService.js';
 import { createDocumentService } from './application/services/documentService.js';
 import { createRbacService } from './application/services/rbacService.js';
 import { createReadStatusService } from './application/services/readStatusService.js';
@@ -33,12 +34,14 @@ import { requireAuth } from './middleware/requireAuth.js';
 import { createAuthController } from './presentation/controllers/authController.js';
 import { createChannelsController } from './presentation/controllers/channelsController.js';
 import { createChatController } from './presentation/controllers/chatController.js';
+import { createConversationController } from './presentation/controllers/conversationController.js';
 import { createDocumentController } from './presentation/controllers/documentController.js';
 import { createReadStatusController } from './presentation/controllers/readStatusController.js';
 import { createSearchController } from './presentation/controllers/searchController.js';
 import { createAuthRouter } from './routes/authRoutes.js';
 import { createChannelsRouter } from './routes/channelsRoutes.js';
 import { createChatRouter } from './routes/chatRoutes.js';
+import { createConversationRouter } from './routes/conversationRoutes.js';
 import { createDocumentRouter } from './routes/documentRoutes.js';
 import { createReadStatusRouter } from './routes/readStatusRoutes.js';
 import { createSearchRouter } from './routes/searchRoutes.js';
@@ -171,6 +174,14 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
   const chatService = createChatService({ agent: ragAgent, conversationRepo });
   const chatController = createChatController({ chatService });
   app.use('/api/chat', createChatRouter(chatController));
+
+  // Conversations read side (Epic 5, Story 5.2). Registered AFTER the /api gate, so
+  // it inherits requireAuth + the RBAC middleware. Access control is by OWNERSHIP
+  // (req.session.userId), not channel scope (D2) — allowedChannelIds is unused here.
+  // Reuses the SAME conversationRepo instance built above for chat.
+  const conversationService = createConversationService({ conversationRepo });
+  const conversationController = createConversationController({ conversationService });
+  app.use('/api/conversations', createConversationRouter(conversationController));
 
   return app;
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { SearchFragment, SSEFrame } from '@hivly/shared/schemas';
 
@@ -165,6 +165,178 @@ describe('createRagAgent().runChat', () => {
 
     const prepared = model.received[0];
     expect(prepared.some((t) => t.role === 'user' && t.content === 'the question')).toBe(true);
+  });
+
+  it('should compress an over-budget history into a system summary before the model reasons (AC3)', async () => {
+    const model = recordingChatModel();
+    const agent = createRagAgent({
+      chatModel: model,
+      ragRetriever: fakeRagRetriever([]),
+      memoryWindow: 20,
+    });
+
+    // A long prior history (≈6000 tokens) that exceeds the 4000-token budget, so the
+    // reason node summarizes the oldest turns before building the model prompt.
+    const history: ChatTurn[] = [
+      { role: 'user', content: 'a'.repeat(4000) },
+      { role: 'assistant', content: 'b'.repeat(4000) },
+      { role: 'user', content: 'c'.repeat(4000) },
+      { role: 'assistant', content: 'd'.repeat(4000) },
+    ];
+
+    await collect(
+      agent.runChat({
+        message: 'the follow-up',
+        history,
+        allowedChannelIds: ['chan-1'],
+        conversationId: 'conv-compress',
+      }),
+    );
+
+    // The model is streamed twice: once to summarize (reason), once to respond.
+    expect(model.received.length).toBe(2);
+    // The respond prompt (the last stream call) carries an ephemeral system summary.
+    const respondPrompt = model.received.at(-1) as ChatTurn[];
+    expect(respondPrompt.some((t) => t.content.startsWith('<conversation summary>'))).toBe(true);
+    // The current turn is still present verbatim (recent tail preserved).
+    expect(respondPrompt.some((t) => t.role === 'user' && t.content === 'the follow-up')).toBe(true);
+  });
+
+  it('should fall back to the VERBATIM uncompressed window when summarization fails (code-review patch)', async () => {
+    let calls = 0;
+    const received: ChatTurn[][] = [];
+    const model: ChatModel = {
+      async *stream(messages: ChatTurn[]): AsyncIterable<string> {
+        calls += 1;
+        if (calls === 1) throw new Error('summarization provider blip');
+        received.push(messages);
+        yield 'ok';
+      },
+    };
+    const agent = createRagAgent({
+      chatModel: model,
+      ragRetriever: fakeRagRetriever([]),
+      memoryWindow: 20,
+    });
+    const history: ChatTurn[] = [
+      { role: 'user', content: 'a'.repeat(4000) },
+      { role: 'assistant', content: 'b'.repeat(4000) },
+      { role: 'user', content: 'c'.repeat(4000) },
+      { role: 'assistant', content: 'd'.repeat(4000) },
+    ];
+
+    const frames = await collect(
+      agent.runChat({
+        message: 'the follow-up',
+        history,
+        allowedChannelIds: ['chan-1'],
+        conversationId: 'conv-compress-fail',
+      }),
+    );
+
+    // The turn still completes — a transient summarization failure does not abort
+    // the whole turn; reasonNode falls back to the memory_window-truncated history.
+    expect(frames.at(-1)).toEqual({ type: 'done', conversationId: 'conv-compress-fail' });
+    // The respond prompt carries the RAW windowed history, NOT a compressed summary —
+    // proving the fallback actually used `windowed`, not an empty/partial substitute.
+    const respondPrompt = received.at(-1) as ChatTurn[];
+    expect(respondPrompt.some((t) => t.content.startsWith('<conversation summary>'))).toBe(false);
+    expect(respondPrompt.some((t) => t.role === 'user' && t.content === 'a'.repeat(4000))).toBe(true);
+    expect(respondPrompt.some((t) => t.role === 'assistant' && t.content === 'd'.repeat(4000))).toBe(true);
+  });
+
+  it('should propagate (not swallow) an abort that occurs during summarization (code-review patch)', async () => {
+    // NOTE on what this test can and can't prove: LangGraph itself checks the
+    // abort signal between super-steps, so `graph.stream` rejects once the signal
+    // is aborted regardless of whether reasonNode's own catch rethrows or falls
+    // back — a bare `.rejects.toThrow()` (or a respond-call count) can't tell the
+    // two branches apart (verified empirically: temporarily removing the guard
+    // still left this assertion passing). The one thing the guard's PLACEMENT
+    // actually changes is whether the misleading "history compression failed"
+    // error gets logged for a plain client disconnect — that's what we assert.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const controller = new AbortController();
+    const model: ChatModel = {
+      async *stream(): AsyncIterable<string> {
+        // Simulate the client disconnecting WHILE the summarization request is
+        // in flight, then the provider call rejecting with an abort error.
+        controller.abort();
+        throw new DOMException('The operation was aborted', 'AbortError');
+      },
+    };
+    const agent = createRagAgent({
+      chatModel: model,
+      ragRetriever: fakeRagRetriever([]),
+      memoryWindow: 20,
+    });
+    const history: ChatTurn[] = [
+      { role: 'user', content: 'a'.repeat(4000) },
+      { role: 'assistant', content: 'b'.repeat(4000) },
+      { role: 'user', content: 'c'.repeat(4000) },
+      { role: 'assistant', content: 'd'.repeat(4000) },
+    ];
+
+    await expect(
+      collect(
+        agent.runChat(
+          {
+            message: 'the follow-up',
+            history,
+            allowedChannelIds: ['chan-1'],
+            conversationId: 'conv-compress-abort',
+          },
+          controller.signal,
+        ),
+      ),
+    ).rejects.toThrow();
+    // The abort guard runs BEFORE the fallback's console.error — an aborted
+    // signal must never be logged as a "history compression failed" error.
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it('should thread the abort signal into the summarization call (code-review patch)', async () => {
+    const receivedSignals: (AbortSignal | undefined)[] = [];
+    const model: ChatModel = {
+      async *stream(_messages: ChatTurn[], signal?: AbortSignal): AsyncIterable<string> {
+        receivedSignals.push(signal);
+        yield 'ok';
+      },
+    };
+    const agent = createRagAgent({
+      chatModel: model,
+      ragRetriever: fakeRagRetriever([]),
+      memoryWindow: 20,
+    });
+    const controller = new AbortController();
+    const history: ChatTurn[] = [
+      { role: 'user', content: 'a'.repeat(4000) },
+      { role: 'assistant', content: 'b'.repeat(4000) },
+      { role: 'user', content: 'c'.repeat(4000) },
+      { role: 'assistant', content: 'd'.repeat(4000) },
+    ];
+
+    await collect(
+      agent.runChat(
+        {
+          message: 'the follow-up',
+          history,
+          allowedChannelIds: ['chan-1'],
+          conversationId: 'conv-compress-signal',
+        },
+        controller.signal,
+      ),
+    );
+
+    // Both the summarization call (reason) and the respond call are handed a real
+    // signal (not undefined) — proving graph.stream's signal is threaded through
+    // reasonNode -> compressIfNeeded -> summarize -> chatModel.stream, not just into
+    // respondNode as before this patch. LangGraph's own signal-honoring guarantee
+    // (that graph.stream({signal}) actually cancels an in-flight run) is already
+    // exercised end-to-end for respondNode elsewhere (5.1 review); this test only
+    // guards THIS diff's new plumbing.
+    expect(receivedSignals).toHaveLength(2);
+    expect(receivedSignals.every((s) => s instanceof AbortSignal)).toBe(true);
   });
 
   it('should truncate history to [] when memoryWindow <= 0 (guards slice(-0) === full history)', async () => {

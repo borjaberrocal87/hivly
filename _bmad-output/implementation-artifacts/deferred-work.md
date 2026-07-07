@@ -1,5 +1,16 @@
 # Deferred Work
 
+## Deferred from: code review of 5-2-gestion-de-conversaciones-e-historial, round 2 (2026-07-07)
+
+- `Array.from`-based title truncation (`deriveTitle`) is Unicode-code-point-safe but not grapheme-cluster-safe — a ZWJ emoji sequence, flag pair, or base+combining-diacritic sequence spanning multiple code points can still be split at the 80-code-point boundary. A fully correct fix needs `Intl.Segmenter({granularity:'grapheme'})`; no AC requires grapheme-perfect truncation.
+- The `id ASC`/`id DESC` SQL tiebreakers (`conversationRepository.drizzle.ts`) make ordering deterministic but not necessarily chronologically correct on an exact `created_at` tie — ids are random UUIDv4s unrelated to insertion order. A true fix needs a monotonic secondary column (serial or UUIDv7), a schema change out of scope for a review patch.
+
+## Deferred from: code review of 5-2-gestion-de-conversaciones-e-historial (2026-07-07)
+
+- Concurrent requests on the same conversationId can race `getMessages`↔`appendMessage(user)` (`chatService.ts:666-678`) — low-probability (a user firing two simultaneous turns on the same conversation, e.g. double-tab); D4 only guards single-request ordering, not cross-request concurrency; no AC requires handling it. Matches how similar low-probability races (TOCTOU) were deferred in Epic 4.
+- Full, unbounded conversation history fetched on every `/api/chat` turn (`conversationRepository.drizzle.ts` `getMessages` has no `LIMIT`) — pre-existing design per D3/D7 (the `reason` node's `memory_window` cap + `compressIfNeeded` truncate downstream in JS); real cost only materializes for very long conversations.
+- `page` cap still allows an expensive ~1e8 `OFFSET`; the "guards against a bigint OFFSET overflow" comment overstates the actual risk (a JS number/int4 offset doesn't overflow, it just forces Postgres to skip a lot of rows) — copied verbatim from the established `documents.ts` convention (Story 4.2), not introduced by 5.2.
+
 ## Deferred from: code review of 1-1-inicializar-el-repositorio-y-la-estructura-del-monorepo (2026-07-03)
 
 - Dev scripts (`node --watch src/main.ts`) won't run .ts files without a TS loader — placeholder scaffold, real tooling (tsx/Vite) lands in later stories
