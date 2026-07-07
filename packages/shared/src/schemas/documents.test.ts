@@ -58,6 +58,46 @@ describe('DocumentsQuerySchema', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.page).toBe(1_000_000);
   });
+
+  it('should leave channelId undefined when absent', () => {
+    const result = DocumentsQuerySchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.channelId).toBeUndefined();
+  });
+
+  it('should pass through a channelId string', () => {
+    const result = DocumentsQuerySchema.safeParse({ channelId: '1234567890' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.channelId).toBe('1234567890');
+  });
+
+  it('should reject an empty channelId', () => {
+    expect(DocumentsQuerySchema.safeParse({ channelId: '' }).success).toBe(false);
+  });
+
+  it('should default unreadOnly to false when absent', () => {
+    const result = DocumentsQuerySchema.safeParse({});
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.unreadOnly).toBe(false);
+  });
+
+  it('should parse unreadOnly=true as true', () => {
+    const result = DocumentsQuerySchema.safeParse({ unreadOnly: 'true' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.unreadOnly).toBe(true);
+  });
+
+  it('should parse unreadOnly=false as false (not the truthy-string trap)', () => {
+    const result = DocumentsQuerySchema.safeParse({ unreadOnly: 'false' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.unreadOnly).toBe(false);
+  });
+
+  it('should parse unreadOnly=1 as true', () => {
+    const result = DocumentsQuerySchema.safeParse({ unreadOnly: '1' });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.unreadOnly).toBe(true);
+  });
 });
 
 describe('DocumentFragmentSchema', () => {
