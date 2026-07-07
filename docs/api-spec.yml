@@ -187,19 +187,39 @@ paths:
   /api/conversations:
     get:
       tags: [conversations]
-      summary: List the caller's conversations
+      summary: List the caller's conversations (paginated, most-recently-active first)
+      description: >
+        Scoped to the caller's own conversations by session userId — ownership is the
+        access control, NOT allowedChannelIds. Ordered updated_at DESC. Each item's
+        title is DERIVED from the conversation's first user message (there is no title
+        column); pagination mirrors GET /api/documents.
+      parameters:
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
-        "200": { description: Conversation list }
+        "200":
+          description: Paginated list of the caller's conversations
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationsResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /api/conversations/{conversationId}:
     get:
       tags: [conversations]
-      summary: Fetch a single conversation with its messages
+      summary: Fetch a single owned conversation with its messages (chronological)
+      description: >
+        Ownership-checked: an unknown, unowned, or malformed conversationId all return
+        404 — no existence leak between users. Messages are ordered created_at ASC.
       parameters:
-        - { name: conversationId, in: path, required: true, schema: { type: string } }
+        - { name: conversationId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
-        "200": { description: Conversation with messages }
+        "200":
+          description: The conversation with its messages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConversationDetail" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -316,6 +336,56 @@ components:
             type: { const: error }
             code: { type: string }
             message: { type: string }
+
+    Citation:
+      description: A cited source from packages/shared/src/schemas/citation.ts
+      type: object
+      required: [channel, author, date]
+      properties:
+        channel: { type: string }
+        author: { type: string }
+        date: { type: string }
+
+    ConversationSummary:
+      description: One item of GET /api/conversations (schemas/conversations.ts)
+      type: object
+      required: [id, title, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, description: Derived from the first user message, truncated to 80 chars }
+        createdAt: { type: string, description: ISO 8601 }
+        updatedAt: { type: string, description: ISO 8601 }
+
+    ConversationsResponse:
+      description: Paginated conversation list (schemas/conversations.ts)
+      type: object
+      required: [results, page, limit, total]
+      properties:
+        results: { type: array, items: { $ref: "#/components/schemas/ConversationSummary" } }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+
+    ConversationMessage:
+      description: One message in a conversation detail (schemas/conversations.ts)
+      type: object
+      required: [id, role, content, citations, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [user, assistant, system] }
+        content: { type: string }
+        citations: { type: array, items: { $ref: "#/components/schemas/Citation" } }
+        createdAt: { type: string, description: ISO 8601 }
+
+    ConversationDetail:
+      description: GET /api/conversations/{conversationId} (schemas/conversations.ts)
+      type: object
+      required: [id, createdAt, updatedAt, messages]
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, description: ISO 8601 }
+        updatedAt: { type: string, description: ISO 8601 }
+        messages: { type: array, items: { $ref: "#/components/schemas/ConversationMessage" } }
 
   responses:
     BadRequest:

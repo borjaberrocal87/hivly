@@ -8,6 +8,7 @@ import type { Citation } from '@hivly/shared/db';
 import type { SSEFrame } from '@hivly/shared/schemas';
 
 import type { RagAgent } from '../../agent/graph.js';
+import type { ChatTurn } from '../../domain/repositories/chatModel.js';
 import type {
   Conversation,
   ConversationRepository,
@@ -64,6 +65,24 @@ export function createChatService(deps: {
     },
 
     async *streamChat(conversation, message, allowedChannelIds, signal): AsyncIterable<SSEFrame> {
+      // AC4 (closes 5.1 D13): load the conversation's PRIOR turns so the agent
+      // reasons over the whole history, not just the new message. Compression of an
+      // over-long history happens downstream in the agent's `reason` node (D5), not
+      // here — this service just supplies the turns.
+      //
+      // ORDERING IS LOAD-BEARING (D4 — the double-append trap): runChat appends the
+      // current user message itself (agent/graph.ts). So getMessages MUST run BEFORE
+      // the appendMessage(user) below — that way it returns ONLY prior turns and the
+      // current message is added exactly once (by runChat). Do NOT reorder these two
+      // DB calls: loading after the insert would put the current message in `history`
+      // AND have runChat append it again → a duplicated turn in the prompt.
+      const priorMessages = await conversationRepo.getMessages(conversation.id);
+      // No `system` rows are persisted today (compression is ephemeral, D8); drop
+      // any defensively so the prompt only ever carries user/assistant turns.
+      const history: ChatTurn[] = priorMessages
+        .filter((m) => m.role !== 'system')
+        .map((m) => ({ role: m.role, content: m.content }));
+
       await conversationRepo.appendMessage({
         conversationId: conversation.id,
         role: 'user',
@@ -71,9 +90,6 @@ export function createChatService(deps: {
         citations: [],
       });
 
-      // 5.1 does not load prior turns into the prompt — there is no
-      // history-list port yet (deferred to Story 5.2's conversation history
-      // work); each turn reasons over just the message just sent.
       let answer = '';
       const citations: Citation[] = [];
 
@@ -112,7 +128,7 @@ export function createChatService(deps: {
 
       try {
         for await (const frame of agent.runChat(
-          { message, history: [], allowedChannelIds, conversationId: conversation.id },
+          { message, history, allowedChannelIds, conversationId: conversation.id },
           signal,
         )) {
           if (frame.type === 'token') {

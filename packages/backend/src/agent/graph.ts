@@ -18,6 +18,7 @@ import type { SearchFragment, SSEFrame } from '@hivly/shared/schemas';
 
 import type { ChatModel, ChatTurn } from '../domain/repositories/chatModel.js';
 import type { RagRetriever } from '../domain/repositories/ragRetriever.js';
+import { COMPRESSION_TOKEN_BUDGET, compressIfNeeded } from './compress.js';
 import { buildRAGContext, SYSTEM_PROMPT } from './prompt.js';
 
 /** Local cap on retrieved fragments — there is no `knowledge.topK` in config (D3). */
@@ -55,15 +56,36 @@ function buildGraph(deps: { chatModel: ChatModel; ragRetriever: RagRetriever; me
     return { retrievedFragments };
   }
 
-  async function reasonNode(state: AgentStateType): Promise<Partial<AgentStateType>> {
-    // D3: memory_window is a turn-COUNT truncation window in 5.1, not summarization
-    // (that's compressIfNeeded() in 5.2). Guard `<= 0`: `slice(-0)` === `slice(0)`
-    // would return the FULL history (the opposite of "keep zero turns").
-    const recentTurns = memoryWindow > 0 ? state.messages.slice(-memoryWindow) : [];
+  async function reasonNode(
+    state: AgentStateType,
+    config?: LangGraphRunnableConfig,
+  ): Promise<Partial<AgentStateType>> {
+    // Two-stage history preparation (D7 — memory_window and the token budget coexist):
+    // 1) memory_window is a coarse turn-COUNT cap (5.1). Guard `<= 0`: `slice(-0)` ===
+    //    `slice(0)` would return the FULL history (the opposite of "keep zero turns").
+    const windowed = memoryWindow > 0 ? state.messages.slice(-memoryWindow) : [];
+    // 2) compressIfNeeded (5.2, AC3) summarizes the oldest turns when the windowed
+    //    history still exceeds the token budget; under budget it passes through
+    //    unchanged (identical to 5.1 — no regression). Ephemeral (D8): the summary is
+    //    only in this prompt, never persisted. A transient summarization failure
+    //    (rate limit, network blip) must not fail the whole turn — fall back to the
+    //    coarse memory_window-truncated history instead (code-review patch).
+    let prepared: ChatTurn[];
+    try {
+      prepared = await compressIfNeeded(windowed, chatModel, COMPRESSION_TOKEN_BUDGET, config?.signal);
+    } catch (err) {
+      // A client-disconnect abort is NOT a transient failure to fall back from —
+      // rethrow it so it propagates the same way an abort during respondNode does
+      // (graph.stream rejects, the turn ends). Swallowing it here would silently
+      // continue the turn with paid downstream work for a caller that already left.
+      if (config?.signal?.aborted) throw err;
+      console.error('[agent] history compression failed, falling back to uncompressed window:', err);
+      prepared = windowed;
+    }
     const preparedMessages: ChatTurn[] = [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'system', content: buildRAGContext(state.retrievedFragments) },
-      ...recentTurns,
+      ...prepared,
     ];
     return { preparedMessages };
   }
