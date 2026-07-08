@@ -178,7 +178,13 @@ development_status:
   6-2-worker-sync-re-indexacion-y-purgado: done
   6-3-sincronizacion-al-arranque-y-reconciliacion-offline: done
   6-4-notificaciones-externas-seguridad-y-graceful-shutdown: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
+  # ── Operational backlog (post-roadmap) — no epic; see operational-backlog.md ─
+  # Numbered ops-N to stay outside the epic sequence (Borja chose an explicit backlog
+  # over a hardening epic at the Epic 6 retro, 2026-07-08). Not auto-discovered by
+  # create-story/dev-story (they scan number-number keys); invoke these explicitly.
+  ops-1-maxlen-stream-trimming: done
+  ops-2-integration-test-isolation: ready-for-dev
 
 action_items:
   - epic: 1
@@ -283,5 +289,25 @@ action_items:
     status: open
   - epic: 5
     action: "Housekeeping reminder: after the multi-system critical fix lands + is merged, flip epic-5 -> done (currently in-progress; NOT done because the provider-contract fix is incomplete + untested)."
+    owner: "Amelia (Dev)"
+    status: done
+  - epic: 6
+    action: "Create the explicit post-roadmap operational backlog (operational-backlog.md) as the home for reliability/observability/test-hygiene debt now that there is no next epic; rank by real operational impact, promote to a BMAD story when picked up. DONE 2026-07-08 at the Epic 6 retro (Borja chose the explicit-backlog option). File: _bmad-output/implementation-artifacts/operational-backlog.md."
+    owner: "Amelia (Dev) + Winston"
+    status: done
+  - epic: 6
+    action: "MAXLEN / stream trimming on all Redis Streams (backlog P1.1) — bounded xAdd/XTRIM on hivly:discord:messages + :updated + :deleted, confirming the cap never trims a PEL-pending entry. Third deferral (Epic 3 AI#4 -> Epic 5 retro -> here); elevated to backlog P1."
+    owner: "Amelia (Dev) + Winston"
+    status: open
+  - epic: 6
+    action: "Fix backend integration-test isolation (backlog P1.2) — the recurring RBAC 'test-guild role leak' flake reported in the 6.2/6.3/6.4 Completion Notes; run-unique roles/channels + own-id cleanup, or stop running integration tests against a stack with live dev containers attached. Green when npm run test:integration is deterministic."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 6
+    action: "Trace panel (tool_call/observation) is a RETAINED product goal for a future agentic-capabilities epic (confirmed with Borja 2026-07-08) — keep the annotation on Story 5.4 AC + UX-DR20; homed as backlog item F1. Not operational debt."
+    owner: "John (PM) + Sally (UX)"
+    status: open
+  - epic: 6
+    action: "Standing DoD (carry-forward from Epic 5 AI#2): any future story touching the LLM/StateGraph is not done until exercised against the real provider (env-gated smoke). No trigger in Epic 6; re-arms when agentic work resumes."
     owner: "Amelia (Dev)"
     status: open
