@@ -1,19 +1,22 @@
-// @hivly/workers — Indexer consumer process (AD-1: standalone Node process).
-// Boot order (AD-8): loadConfig() first, then read the required secrets from the
-// environment, then open the DB + Redis clients, then run the consumer loop. A
-// config or missing-secret failure aborts BEFORE any network I/O.
+// @hivly/workers — Indexer + Sync consumer process (AD-1: standalone Node
+// process). Boot order (AD-8): loadConfig() first, then read the required
+// secrets from the environment, then open the DB + Redis clients, then run the
+// consumer loops. A config or missing-secret failure aborts BEFORE any network
+// I/O.
 //
-// This is the Indexer (Story 3.3): it drains hivly:discord:messages, embeds and
-// upserts into pgvector. The Sync consumer (edits/deletes) lands in Epic 6.
+// The Indexer (Story 3.3) drains hivly:discord:messages, embeds and upserts
+// into pgvector. The Sync consumer (Story 6.2) drains the updated/deleted
+// streams, re-indexing edits and purging deletes — gated by config.sync.enabled.
 import { loadConfig } from '@hivly/shared';
 import { createDatabase, type Database } from '@hivly/shared/db';
 import { createEmbeddingsModel } from '@hivly/shared/providers';
-import { createRedisClient } from '@hivly/shared/redis';
+import { createRedisClient, type RedisClient } from '@hivly/shared/redis';
 
 import { runIndexer } from './indexer/consumer.js';
 import { MAX_CHUNK_SIZE } from './indexer/chunking.js';
 import { MAX_GROUPING_WINDOW } from './indexer/grouping.js';
-import { createLogger } from './logger.js';
+import { createLogger, type Logger } from './logger.js';
+import { runSync } from './sync/consumer.js';
 
 /** Read a required secret from the environment; abort if unset (AD-8, before any I/O). */
 function requireEnv(name: string): string {
@@ -22,6 +25,53 @@ function requireEnv(name: string): string {
     throw new Error(`Required environment variable ${name} is not set.`);
   }
   return value;
+}
+
+const REDIS_CONNECT_TIMEOUT_MS = 10_000;
+
+/** Quit a Redis client, bounded so a stuck socket can't block shutdown. */
+async function quitRedisBounded(client: RedisClient, ms: number): Promise<void> {
+  await Promise.race([
+    client
+      .quit()
+      .then(() => undefined)
+      .catch(() => undefined),
+    new Promise<void>((resolve) => setTimeout(resolve, ms)),
+  ]);
+}
+
+/**
+ * Connect a Redis client with a bounded timeout, fail-fast (exit 1) on
+ * failure — mirrors the original single-client boot logic, shared so the
+ * Indexer's and Sync's clients connect identically. Returns `false` (without
+ * exiting) when a SIGTERM/SIGINT is already racing this same window, so the
+ * caller can bail out instead of overwriting shutdown()'s exit path.
+ */
+async function connectRedisOrExit(
+  client: RedisClient,
+  logger: Logger,
+  label: string,
+  isShuttingDown: () => boolean,
+): Promise<boolean> {
+  try {
+    await Promise.race([
+      client.connect(),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Redis connect timed out after ${REDIS_CONNECT_TIMEOUT_MS}ms`)),
+          REDIS_CONNECT_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return true;
+  } catch (err: unknown) {
+    if (isShuttingDown()) return false;
+    logger.error(`initial ${label} Redis connect failed, aborting`, {
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    process.exit(1);
+    return false; // unreachable — satisfies the return type after process.exit
+  }
 }
 
 async function main(): Promise<void> {
@@ -66,9 +116,16 @@ async function main(): Promise<void> {
   // wait. Real consumer-group drain stays in Epic 6.
   const shutdownSignal = new AbortController();
   let shuttingDown = false;
-  // Assigned once runIndexer starts; shutdown waits for it (bounded) so the
-  // in-flight batch settles before the db/redis connections close underneath it.
+  // Assigned once runIndexer/runSync start; shutdown waits for both (bounded)
+  // so in-flight work settles before the db/redis connections close underneath
+  // them. syncRedis stays undefined when config.sync.enabled is false.
   let indexerPromise: Promise<void> = Promise.resolve();
+  let syncPromise: Promise<void> = Promise.resolve();
+  // Two dedicated Sync clients — one per blocking loop (updated/deleted). Two
+  // concurrent blocking reads cannot share a client (see sync/consumer.ts's
+  // header). Both stay undefined when config.sync.enabled is false.
+  let syncRedisUpdated: RedisClient | undefined;
+  let syncRedisDeleted: RedisClient | undefined;
   const shutdown = (signal: string): void => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -76,24 +133,20 @@ async function main(): Promise<void> {
     logger.info(`received ${signal}, shutting down`);
     void (async () => {
       try {
-        // Give the loop a bounded moment to exit at its next boundary. A parked
-        // BLOCK 5000 read returns within ~5s, so 7s covers it plus one batch.
-        // `.catch` neutralises a late rejection losing the race — `main()`'s own
-        // `await indexerPromise` below already ignores it once shutdown started.
+        // Give both loops a bounded moment to exit at their next boundary. A
+        // parked BLOCK 5000 read returns within ~5s, so 7s covers it plus one
+        // batch. `.catch` neutralises a late rejection losing the race —
+        // `main()`'s own `await` below already ignores it once shutdown started.
         await Promise.race([
-          indexerPromise.catch(() => undefined),
+          Promise.all([indexerPromise, syncPromise].map((p) => p.catch(() => undefined))),
           new Promise<void>((resolve) => setTimeout(resolve, 7_000)),
         ]);
         // Await quit() so any in-flight command flushes, bounded so a stuck socket
-        // can't block exit. `.catch` neutralises a late rejection losing the race —
-        // otherwise it surfaces as an unhandledRejection → exit(1).
-        await Promise.race([
-          redis
-            .quit()
-            .then(() => undefined)
-            .catch(() => undefined),
-          new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-        ]);
+        // can't block exit. quitRedisBounded neutralises a late rejection losing
+        // the race — otherwise it surfaces as an unhandledRejection → exit(1).
+        await quitRedisBounded(redis, 5_000);
+        if (syncRedisUpdated) await quitRedisBounded(syncRedisUpdated, 5_000);
+        if (syncRedisDeleted) await quitRedisBounded(syncRedisDeleted, 5_000);
         // pg's Pool.end() takes no timeout arg; bound it so a stuck pool can't
         // block shutdown past 10s (the finally still exits regardless).
         await Promise.race([
@@ -117,49 +170,59 @@ async function main(): Promise<void> {
   const databaseUrl = requireEnv('DATABASE_URL');
   const redisUrl = requireEnv('REDIS_URL');
 
-  // One pooled DB client and one dedicated Redis client for the process lifetime.
+  // One pooled DB client (shared, pooled) and one dedicated Redis client per
+  // consumer loop for the process lifetime. node-redis retries the initial
+  // connect forever (reconnectStrategy always returns a number), so connect()
+  // never rejects on a boot outage — it just hangs. Bound it: if Redis is
+  // unreachable within the timeout we FAIL FAST (exit 1) and Compose restarts
+  // the container (AC-1, same pattern as the bot).
   const db: Database = createDatabase(databaseUrl);
   const redis = createRedisClient(redisUrl);
-  // node-redis retries the initial connect forever (reconnectStrategy always
-  // returns a number), so connect() never rejects on a boot outage — it just
-  // hangs. Bound it: if Redis is unreachable within the timeout we FAIL FAST
-  // (exit 1) and Compose restarts the container (AC-1, same pattern as the bot).
-  const REDIS_CONNECT_TIMEOUT_MS = 10_000;
-  try {
-    await Promise.race([
-      redis.connect(),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`Redis connect timed out after ${REDIS_CONNECT_TIMEOUT_MS}ms`)),
-          REDIS_CONNECT_TIMEOUT_MS,
-        ),
-      ),
-    ]);
-  } catch (err: unknown) {
-    // A SIGTERM/SIGINT racing this same window already owns the exit path
-    // (shutdown() is mid-flight) — don't overwrite it with a misleading
-    // "connect failed" fatal log and a competing exit(1).
-    if (shuttingDown) return;
-    logger.error('initial Redis connect failed, aborting', {
-      reason: err instanceof Error ? err.message : String(err),
-    });
-    process.exit(1);
-  }
+  if (!(await connectRedisOrExit(redis, logger, 'indexer', () => shuttingDown))) return;
 
   // Build the embeddings model from validated config (no network I/O until used).
   const embedder = createEmbeddingsModel(config.embeddings);
 
+  // AC-6: the Sync consumer runs concurrently with the Indexer, gated by
+  // config.sync.enabled. Its two blocking loops each get their OWN Redis client
+  // (two concurrent blocking reads cannot share one — see sync/consumer.ts's
+  // header comment).
+  if (config.sync.enabled) {
+    syncRedisUpdated = createRedisClient(redisUrl);
+    if (!(await connectRedisOrExit(syncRedisUpdated, logger, 'sync-updated', () => shuttingDown)))
+      return;
+    syncRedisDeleted = createRedisClient(redisUrl);
+    if (!(await connectRedisOrExit(syncRedisDeleted, logger, 'sync-deleted', () => shuttingDown)))
+      return;
+  } else {
+    logger.info('sync disabled — not starting Sync consumer');
+  }
+
   logger.info('indexer starting — draining hivly:discord:messages');
   indexerPromise = runIndexer({ redis, db, embedder, config, logger, signal: shutdownSignal.signal });
+
+  if (syncRedisUpdated && syncRedisDeleted) {
+    logger.info('sync starting — draining updated/deleted streams');
+    syncPromise = runSync({
+      redisUpdated: syncRedisUpdated,
+      redisDeleted: syncRedisDeleted,
+      db,
+      embedder,
+      config,
+      logger,
+      signal: shutdownSignal.signal,
+    });
+  }
+
   try {
-    await indexerPromise;
+    await Promise.all([indexerPromise, syncPromise]);
   } catch (err) {
-    // A rejection surfacing after shutdown() already began is expected (the loop
-    // was aborted mid-flight) — shutdown() owns the exit path from here. Still log
-    // it (rather than swallow silently) in case it's an unrelated real failure
-    // that happened to coincide with the shutdown.
+    // A rejection surfacing after shutdown() already began is expected (a loop
+    // was aborted mid-flight) — shutdown() owns the exit path from here. Still
+    // log it (rather than swallow silently) in case it's an unrelated real
+    // failure that happened to coincide with the shutdown.
     if (shuttingDown) {
-      logger.debug('indexer promise rejected during shutdown — already exiting', {
+      logger.debug('a consumer promise rejected during shutdown — already exiting', {
         reason: err instanceof Error ? err.message : String(err),
       });
       return;
