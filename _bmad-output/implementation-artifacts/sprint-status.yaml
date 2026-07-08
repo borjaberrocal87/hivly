@@ -42,6 +42,7 @@
 
 generated: 2026-06-30
 last_updated: 2026-07-08
+# action_items triage 2026-07-08 (bmad-help housekeeping): flipped 12 stale/standing items → done. Group A (5, delivered but unflipped): epic-1 graceful-shutdown (Story 6.4), epic-3 + epic-6 P1.1 MAXLEN (ops-1), epic-6 P1.2 test-isolation (ops-2), epic-3 patch-as-new-code (adopted). Group B (7 standing DoD norms — no completion, re-arm per story): consolidated into operational-backlog.md § Standing Definition-of-Done. Remaining open = 4 genuine backlog items only (epic-2 carried debt → deferred-work.md; epic-3 transactional outbox → P2.1; epic-5 + epic-6 trace panel → F1).
 # epic-6 development_status flipped in-progress → done 2026-07-08 (bmad-help housekeeping). All 4 stories (6-1…6-4) + epic-6-retrospective already done; the flag was left unflipped after the retro (same pattern as epic-4). Roadmap complete: epics 1–6 all done. Only the post-roadmap operational backlog (ops-N + P2/F1 in operational-backlog.md) and the deferred items remain outside the epic sequence.
 # story 6-4 review → done (bmad-code-review 2026-07-08): 3 adversarial layers (Blind + Edge + Auditor, Opus 4.8). 2 decision-needed (both resolved w/ Borja → patch), 5 patches applied, 3 dismissed. Patches: (1) notifier formatText redacts `://user:pass@`→`://***@` + caps length (AC-1 secret-leak + Telegram 4096 drop); (2) fatal handlers guard on isShuttingDown() so an uncaughtException mid-drain can't abort the clean shutdown / fire a spurious alert (backend exposes it from createGracefulShutdown; bot/workers hoist their shuttingDown flag); (3) workers stop_grace_period 30s→35s (sequential drain = 7s loops + 3×5s redis.quit + 10s db.end = 32s > 30s; backend/bot stay 30s); (4) trust-proxy gated on opts.rateLimit so it's OFF in tests/e2e per note #6. Dismissed: rate-limit "chat tier dead" (false positive — api & chat are complementary burst-vs-sustained caps, matches AC-2 path map), post-uncaughtException 5s window (spec-sanctioned note #9), fetch-reason URL leak (undici msgs don't embed the URL). Gate: lint 0 / 640 unit+web (+3) / build clean / backend-integration 87 pass + security 6/6 (2 pre-existing rbac failures unchanged).
 # story 6-4 ready-for-dev → review (bmad-dev-story 2026-07-08): External notifications + security hardening + graceful shutdown shipped across all three services + @hivly/shared, the final Epic 6 story. New packages/shared/src/{logger.ts,notifier/index.ts} (subpath exports, no I/O at construction, notifier never throws/rejects, bounded ≤5s fetch, no-op when disabled); notifications config block + security.rate_limit reshaped to 3 tiers (api/auth/chat) in @hivly/shared's Zod schema. Backend: helmet mounted first (incl. /health) + trust proxy 1 + 3 express-rate-limit tiers injected via AppOptions.rateLimit (optional, OFF by default — buildTestAppOptions/e2e harness omit it); new packages/backend/src/lifecycle.ts (createGracefulShutdown: bounded server.close/redis.quit/db.end, reentrancy-guarded, optional best-effort notifier on a caught shutdown error) replaces the old stub; new uncaughtException/unhandledRejection handlers (previously absent on the backend). Bot/workers: purely additive notifier wiring into their existing 6.1/6.2 handlers, zero drain-logic changes. docker-compose.yml stop_grace_period:30s on backend/bot/workers. 2 real gotchas found+fixed: helmet's frameguard defaults to SAMEORIGIN not the AC-required DENY; interpolateEnv substitutes ${VAR} across the WHOLE raw config file including comments, so the shipped Hivly.config.yml/.example omit the provider credential blocks entirely while disabled (also fixed the previously-stale tracked Hivly.config.yml.example). Gate green: lint 0 / 637 unit+web (+37: 6 logger, 8 notifier, 7 config, 8 lifecycle, 6 security-integration net-new plus fixture updates) / build clean (5 pkgs) / 104-106 integration (2 pre-existing unrelated rbac.integration.test.ts "test-guild role leak" failures, confirmed via git diff — packages/backend's rbac files untouched by this story) / 13 e2e chromium unchanged pass count with helmet enabled. No migration, no DDL.
@@ -201,9 +202,9 @@ action_items:
     owner: "Amelia (Dev)"
     status: done
   - epic: 1
-    action: "Dedicated hardening story: uncaughtException/unhandledRejection handlers + real graceful shutdown for bot/workers. SCOPE REVISED in Epic 2 retro: minimum (uncaughtException/unhandledRejection + reconnect-with-backoff) pulled forward into Epic 3 stories 3.1/3.3; real graceful shutdown (drain consumer group) stays in Epic 6."
+    action: "Dedicated hardening story: uncaughtException/unhandledRejection handlers + real graceful shutdown for bot/workers. SCOPE REVISED in Epic 2 retro: minimum (uncaughtException/unhandledRejection + reconnect-with-backoff) pulled forward into Epic 3 stories 3.1/3.3; real graceful shutdown (drain consumer group) stays in Epic 6. DONE 2026-07-08 — delivered by Story 6.4 (createGracefulShutdown in packages/backend/src/lifecycle.ts; bot/workers bounded drain + shuttingDown guard; uncaughtException/unhandledRejection handlers)."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 2
     action: "Early validation spike of Epic 3's two external integrations — real smoke of the discord.js Gateway (connect, receive one messageCreate) and the embeddings API (one real call, verify 1536-dim vector) BEFORE building 3.1/3.3 logic on top. Addresses the ioredis-class late-validation risk."
     owner: "Amelia (Dev)"
@@ -221,9 +222,9 @@ action_items:
     owner: "Amelia (Dev)"
     status: open
   - epic: 3
-    action: "Treat every code-review patch as new, un-reviewed code — the next independent pass verifies prior patches with the same rigor as the original code; a patch is not done until an independent pass confirms it. (Epic 3 had 10 review passes; several defects were introduced by prior passes' patches and caught only by the next pass.)"
+    action: "Treat every code-review patch as new, un-reviewed code — the next independent pass verifies prior patches with the same rigor as the original code; a patch is not done until an independent pass confirms it. (Epic 3 had 10 review passes; several defects were introduced by prior passes' patches and caught only by the next pass.) ADOPTED 2026-07-08 — applied in round-2 reviews across Epics 3–6; homed as a Standing DoD in operational-backlog.md."
     owner: "Amelia (Dev)"
-    status: in-progress
+    status: done
   - epic: 3
     action: "Fix the deleted_at exclusion semantics over grouped chunks — JOIN embeddings -> discord_messages via message_ids, and decide exclude-if-any-message-deleted vs exclude-if-all. Resolve when creating Story 4.1 (design note, not a blocker). RESOLVED at Story 4.1 creation (2026-07-06): EXCLUDE-IF-ANY (anti-join; chunk content physically contains deleted text) — documented as decision D1 in story 4-1."
     owner: "Winston + Amelia"
@@ -233,25 +234,25 @@ action_items:
     owner: "Amelia (Dev)"
     status: done
   - epic: 3
-    action: "Stream trimming / retention for hivly:discord:messages — no MAXLEN today, unbounded growth; a future story must decide the cap and confirm it cannot trim entries still pending in any group PEL. Stays deferred to Epic 6, tracked."
+    action: "Stream trimming / retention for hivly:discord:messages — no MAXLEN today, unbounded growth; a future story must decide the cap and confirm it cannot trim entries still pending in any group PEL. Stays deferred to Epic 6, tracked. DONE 2026-07-08 — superseded by ops-1 (PEL-safe XTRIM … MINID trimmer, merged PR #39)."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 3
     action: "Transactional outbox — would fix both the XADD-before-COMMIT window and the pg-connection-held-across-XADD pool risk. Architectural, deferred; revisit when the race/pool pressure is observed."
     owner: "Winston"
     status: open
   - epic: 4
-    action: "A visual AC is not done until the E2E harness asserts it (getComputedStyle/screenshot). No frontend story closes with deferred visual ACs; if a spec is missing, the story adds it (as 4.5 established)."
+    action: "A visual AC is not done until the E2E harness asserts it (getComputedStyle/screenshot). No frontend story closes with deferred visual ACs; if a spec is missing, the story adds it (as 4.5 established). CONSOLIDATED 2026-07-08 — standing DoD, homed in operational-backlog.md § Standing Definition-of-Done."
     owner: "Amelia (Dev) + Sally (UX)"
-    status: open
+    status: done
   - epic: 4
-    action: "Verify tooling/environment assumptions at story creation, not mid-implementation (is X actually installed/available?). Generalizes Playwright-not-installed + Epic 3 config-vs-reality. Add to the create-story checklist for any new tooling."
+    action: "Verify tooling/environment assumptions at story creation, not mid-implementation (is X actually installed/available?). Generalizes Playwright-not-installed + Epic 3 config-vs-reality. Add to the create-story checklist for any new tooling. CONSOLIDATED 2026-07-08 — standing DoD, homed in operational-backlog.md § Standing Definition-of-Done."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 4
-    action: "Run-unique test isolation as definition-of-done: suffix-unique roles/channels per run + own-id cleanup; no broad LIKE cleanups that race sibling suites."
+    action: "Run-unique test isolation as definition-of-done: suffix-unique roles/channels per run + own-id cleanup; no broad LIKE cleanups that race sibling suites. CONSOLIDATED 2026-07-08 — standing DoD, homed in operational-backlog.md § Standing Definition-of-Done."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 4
     action: "CRITICAL PATH before 5.3/5.4 — close the inline-vs-hover cascade debt on result cards and chips (move base border/color off the inline shorthand into the CSS class, mirroring the 4.3 focus fix). DONE 2026-07-07 via PR #26 (fix/frontend-hover-reduced-motion), merged to main."
     owner: "Sally (UX) + Amelia (Dev)"
@@ -273,17 +274,17 @@ action_items:
     owner: "Amelia (Dev)"
     status: done
   - epic: 5
-    action: "Env-gated smoke against the real LLM provider as DoD for any story touching the StateGraph/LLM: a test behind an env var (e.g. ANTHROPIC_API_KEY present) that runs a real /api/chat turn against Anthropic and asserts it streams without a 400. Fake-model green is necessary, not sufficient."
+    action: "Env-gated smoke against the real LLM provider as DoD for any story touching the StateGraph/LLM: a test behind an env var (e.g. ANTHROPIC_API_KEY present) that runs a real /api/chat turn against Anthropic and asserts it streams without a 400. Fake-model green is necessary, not sufficient. CONSOLIDATED 2026-07-08 — standing DoD, homed in operational-backlog.md § Standing Definition-of-Done (re-arms when agentic work resumes)."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 5
-    action: "'A test that lies' rule (assertion tautology): every new test must FAIL when the behavior it claims to cover is reverted — verify empirically by reverting. Generalizes the 5.1/5.3 round-3 findings where a test passed with its fix removed. Review-checklist / DoD gate."
+    action: "'A test that lies' rule (assertion tautology): every new test must FAIL when the behavior it claims to cover is reverted — verify empirically by reverting. Generalizes the 5.1/5.3 round-3 findings where a test passed with its fix removed. Review-checklist / DoD gate. CONSOLIDATED 2026-07-08 — standing DoD, homed in operational-backlog.md § Standing Definition-of-Done."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 5
-    action: "Cross-story contract consistency: when one story injects data into a structure another story consumes (5.2 compression summary -> 5.1 preparedMessages), review the COMBINED contract, not each in isolation. The multi-system bug is exactly this — each story was locally correct, the composed message-array shape was not."
+    action: "Cross-story contract consistency: when one story injects data into a structure another story consumes (5.2 compression summary -> 5.1 preparedMessages), review the COMBINED contract, not each in isolation. The multi-system bug is exactly this — each story was locally correct, the composed message-array shape was not. CONSOLIDATED 2026-07-08 — standing DoD, homed in operational-backlog.md § Standing Definition-of-Done."
     owner: "Amelia (Dev) + Winston"
-    status: open
+    status: done
   - epic: 5
     action: "Adjust 5.4 AC and UX-DR20: the execution-trace panel (tool_call/observation) is explicitly 'deferred to a future agentic-capabilities epic' (NOT Epic 6) — a retained product goal with a future home, not a drop. Annotate the AC/UX-DR and record the backlog item."
     owner: "John (PM) + Sally (UX)"
@@ -297,18 +298,18 @@ action_items:
     owner: "Amelia (Dev) + Winston"
     status: done
   - epic: 6
-    action: "MAXLEN / stream trimming on all Redis Streams (backlog P1.1) — bounded xAdd/XTRIM on hivly:discord:messages + :updated + :deleted, confirming the cap never trims a PEL-pending entry. Third deferral (Epic 3 AI#4 -> Epic 5 retro -> here); elevated to backlog P1."
+    action: "MAXLEN / stream trimming on all Redis Streams (backlog P1.1) — bounded xAdd/XTRIM on hivly:discord:messages + :updated + :deleted, confirming the cap never trims a PEL-pending entry. Third deferral (Epic 3 AI#4 -> Epic 5 retro -> here); elevated to backlog P1. DONE 2026-07-08 — ops-1 (PEL-safe XTRIM … MINID, merged PR #39)."
     owner: "Amelia (Dev) + Winston"
-    status: open
+    status: done
   - epic: 6
-    action: "Fix backend integration-test isolation (backlog P1.2) — the recurring RBAC 'test-guild role leak' flake reported in the 6.2/6.3/6.4 Completion Notes; run-unique roles/channels + own-id cleanup, or stop running integration tests against a stack with live dev containers attached. Green when npm run test:integration is deterministic."
+    action: "Fix backend integration-test isolation (backlog P1.2) — the recurring RBAC 'test-guild role leak' flake reported in the 6.2/6.3/6.4 Completion Notes; run-unique roles/channels + own-id cleanup, or stop running integration tests against a stack with live dev containers attached. Green when npm run test:integration is deterministic. DONE 2026-07-08 — ops-2 (stale test-guild assertion fixed + run-unique ids + fail-fast guard, merged PR #41)."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 6
     action: "Trace panel (tool_call/observation) is a RETAINED product goal for a future agentic-capabilities epic (confirmed with Borja 2026-07-08) — keep the annotation on Story 5.4 AC + UX-DR20; homed as backlog item F1. Not operational debt."
     owner: "John (PM) + Sally (UX)"
     status: open
   - epic: 6
-    action: "Standing DoD (carry-forward from Epic 5 AI#2): any future story touching the LLM/StateGraph is not done until exercised against the real provider (env-gated smoke). No trigger in Epic 6; re-arms when agentic work resumes."
+    action: "Standing DoD (carry-forward from Epic 5 AI#2): any future story touching the LLM/StateGraph is not done until exercised against the real provider (env-gated smoke). No trigger in Epic 6; re-arms when agentic work resumes. CONSOLIDATED 2026-07-08 — same norm as the Epic 5 env-gated-smoke DoD, homed in operational-backlog.md § Standing Definition-of-Done."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
