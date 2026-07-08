@@ -161,7 +161,7 @@ development_status:
   5-2-gestion-de-conversaciones-e-historial: done
   5-3-widget-flotante-fab-panel-base: done
   5-4-mensajes-de-chat-y-ui-de-streaming-sse: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
 
   # ── Épico 6: Sincronización, Notificaciones y Fiabilidad ────────────────────
   epic-6: backlog
@@ -245,10 +245,34 @@ action_items:
     owner: "Sally (UX)"
     status: done
   - epic: 4
-    action: "CRITICAL PATH during 5.3/5.4 — extend the 4.5 harness with chat + SSE specs as part of the definition-of-done (FAB hexagon, panel dims, streaming cursor/tool_call/observation colors)."
+    action: "CRITICAL PATH during 5.3/5.4 — extend the 4.5 harness with chat + SSE specs as part of the definition-of-done (FAB hexagon, panel dims, streaming cursor/tool_call/observation colors). DONE — chat.spec.ts carries 7 e2e tests (4 from 5.3 + 3 from 5.4) asserting FAB/panel/streaming visual ACs via getComputedStyle (confirmed in Epic 5 retro 2026-07-08)."
     owner: "Amelia (Dev)"
-    status: open
+    status: done
   - epic: 4
     action: "CRITICAL PATH before 5.1/5.4 (elevated by Borja) — SSE end-to-end verification spike: confirm Playwright can drive the fetch-streaming chat and observe token frames accumulate, before building the 5.4 streaming UI. DONE 2026-07-07 via PR #25 (spike/sse-streaming-harness), merged to main."
     owner: "Amelia (Dev)"
     status: done
+  - epic: 5
+    action: "CRITICAL PATH — complete the multi-system fix + structural guard. Flatten ALL system turns into a single index-0 message in reasonNode (the uncommitted fix missed compress.ts:98's summary, so the compression path still emitted two system turns -> same Anthropic 400 on 5.2 AC3). Add a guard/decorator that rejects >1 SystemMessage and fails loud in CI, plus a test asserting 'exactly one system at index 0' in BOTH the compressed and uncompressed paths. Blocks flipping epic-5 to done. IMPLEMENTED 2026-07-08 (branch fix/chat-multi-system-message: reasonNode folds all system turns; assertSingleLeadingSystem guard in the LangChain adapter; graph.test.ts asserts one-system-at-0 in both paths + new adapter test; empirically discriminated). PENDING MERGE -> flip epic-5 to done after merge."
+    owner: "Amelia (Dev)"
+    status: in-progress
+  - epic: 5
+    action: "Env-gated smoke against the real LLM provider as DoD for any story touching the StateGraph/LLM: a test behind an env var (e.g. ANTHROPIC_API_KEY present) that runs a real /api/chat turn against Anthropic and asserts it streams without a 400. Fake-model green is necessary, not sufficient."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 5
+    action: "'A test that lies' rule (assertion tautology): every new test must FAIL when the behavior it claims to cover is reverted — verify empirically by reverting. Generalizes the 5.1/5.3 round-3 findings where a test passed with its fix removed. Review-checklist / DoD gate."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 5
+    action: "Cross-story contract consistency: when one story injects data into a structure another story consumes (5.2 compression summary -> 5.1 preparedMessages), review the COMBINED contract, not each in isolation. The multi-system bug is exactly this — each story was locally correct, the composed message-array shape was not."
+    owner: "Amelia (Dev) + Winston"
+    status: open
+  - epic: 5
+    action: "Adjust 5.4 AC and UX-DR20: the execution-trace panel (tool_call/observation) is explicitly 'deferred to a future agentic-capabilities epic' (NOT Epic 6) — a retained product goal with a future home, not a drop. Annotate the AC/UX-DR and record the backlog item."
+    owner: "John (PM) + Sally (UX)"
+    status: open
+  - epic: 5
+    action: "Housekeeping reminder: after the multi-system critical fix lands + is merged, flip epic-5 -> done (currently in-progress; NOT done because the provider-contract fix is incomplete + untested)."
+    owner: "Amelia (Dev)"
+    status: open
