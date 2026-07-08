@@ -15,6 +15,7 @@ import { handleMessageDelete } from './discord/handlers/messageDelete.js';
 import { handleMessageUpdate } from './discord/handlers/messageUpdate.js';
 import { bindGatewayEvents, connectWithRetry } from './discord/reconnect.js';
 import { createLogger } from './logger.js';
+import { runOfflineSync } from './sync/offlineSync.js';
 
 /** Read a required secret from the environment; abort if unset (AD-8, before any I/O). */
 function requireEnv(name: string): string {
@@ -215,6 +216,33 @@ async function main(): Promise<void> {
         error: error instanceof Error ? error.message : String(error),
       });
     });
+  }
+
+  // Story 6.3: after the historical backfill settles, reconcile edits/deletes
+  // that happened on Discord while the bot was offline — publish-only (no bot
+  // DB write). Chained onto backfillPromise (not a separate promise) so it is
+  // covered by the SAME bounded shutdown drain above, and runs after backfill
+  // regardless of whether backfill itself succeeded (per-channel failures
+  // there don't reject backfillPromise; a structural one is already caught).
+  if (config.sync.enabled && config.sync.sync_on_start) {
+    backfillPromise = backfillPromise
+      .then(() =>
+        runOfflineSync({
+          client,
+          config,
+          db,
+          redis,
+          logger,
+          signal: shutdownSignal.signal,
+        }),
+      )
+      .catch((error: unknown) => {
+        logger.error('unexpected offline sync failure', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+  } else {
+    logger.info('offline sync disabled — skipping startup reconciliation');
   }
 }
 
