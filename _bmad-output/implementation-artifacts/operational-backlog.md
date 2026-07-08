@@ -72,3 +72,27 @@
   work first (new frame types + a graph node), then the frontend panel.
 - **Action:** keep the annotation on Story 5.4's AC and UX-DR20 ("deferred to future
   agentic-capabilities epic"); promote to a proper epic if/when Hivly development resumes.
+
+## Standing Definition-of-Done (adopted practices, not tasks)
+
+> Consolidated 2026-07-08 (bmad-help housekeeping). These are process norms surfaced across the Epic
+> 3–6 retros. They have no "completion" — they re-arm on every future story — so they were closing
+> `sprint-status` as perpetually-open `action_items`. Homed here as the standing DoD checklist and
+> marked `done` in `sprint-status` (= adopted). Apply them to every new story; they are not backlog work.
+
+- **Treat every code-review patch as new, un-reviewed code** — an independent pass verifies prior
+  patches with the same rigor as the original code (Epic 3 AI). Applied in round-2 reviews across
+  Epics 3–6.
+- **A visual AC is not done until the E2E harness asserts it** via `getComputedStyle`/screenshot
+  (Epic 4 AI, established by Story 4.5). No frontend story closes with deferred visual ACs.
+- **Verify tooling/environment assumptions at story creation**, not mid-implementation ("is X actually
+  installed/available?"). On the create-story checklist for any new tooling (Epic 4 AI).
+- **Run-unique test isolation as DoD** — suffix-unique roles/channels per run + own-id cleanup; no
+  broad `LIKE` cleanups that race sibling suites (Epic 4 AI; enforced for the backend via ops-2).
+- **Env-gated smoke against the real LLM provider** as DoD for any story touching the StateGraph/LLM —
+  fake-model green is necessary, not sufficient. Re-arms when agentic work resumes (Epic 5 AI).
+- **"A test that lies" rule** — every new test must FAIL when the behavior it covers is reverted;
+  verify empirically by reverting (Epic 5 AI).
+- **Cross-story contract consistency** — when one story injects data into a structure another story
+  consumes, review the COMBINED contract, not each in isolation (Epic 5 AI; source of the multi-system
+  Anthropic-400 bug).
