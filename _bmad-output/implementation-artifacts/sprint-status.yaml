@@ -156,7 +156,7 @@ development_status:
   epic-4-retrospective: done
 
   # ── Épico 5: Agente RAG y Chat ───────────────────────────────────────────────
-  epic-5: in-progress
+  epic-5: done
   5-1-endpoint-sse-de-chat-con-pipeline-rag: done
   5-2-gestion-de-conversaciones-e-historial: done
   5-3-widget-flotante-fab-panel-base: done
@@ -253,9 +253,9 @@ action_items:
     owner: "Amelia (Dev)"
     status: done
   - epic: 5
-    action: "CRITICAL PATH — complete the multi-system fix + structural guard. Flatten ALL system turns into a single index-0 message in reasonNode (the uncommitted fix missed compress.ts:98's summary, so the compression path still emitted two system turns -> same Anthropic 400 on 5.2 AC3). Add a guard/decorator that rejects >1 SystemMessage and fails loud in CI, plus a test asserting 'exactly one system at index 0' in BOTH the compressed and uncompressed paths. Blocks flipping epic-5 to done. IMPLEMENTED 2026-07-08 (branch fix/chat-multi-system-message: reasonNode folds all system turns; assertSingleLeadingSystem guard in the LangChain adapter; graph.test.ts asserts one-system-at-0 in both paths + new adapter test; empirically discriminated). PENDING MERGE -> flip epic-5 to done after merge."
+    action: "CRITICAL PATH — complete the multi-system fix + structural guard. Flatten ALL system turns into a single index-0 message in reasonNode (the uncommitted fix missed compress.ts:98's summary, so the compression path still emitted two system turns -> same Anthropic 400 on 5.2 AC3). Add a guard/decorator that rejects >1 SystemMessage and fails loud in CI, plus a test asserting 'exactly one system at index 0' in BOTH the compressed and uncompressed paths. Blocks flipping epic-5 to done. IMPLEMENTED 2026-07-08 (branch fix/chat-multi-system-message: reasonNode folds all system turns; assertSingleLeadingSystem guard in the LangChain adapter; graph.test.ts asserts one-system-at-0 in both paths + new adapter test; empirically discriminated). DONE — merged to main via PR #33 (2026-07-08); epic-5 flipped to done."
     owner: "Amelia (Dev)"
-    status: in-progress
+    status: done
   - epic: 5
     action: "Env-gated smoke against the real LLM provider as DoD for any story touching the StateGraph/LLM: a test behind an env var (e.g. ANTHROPIC_API_KEY present) that runs a real /api/chat turn against Anthropic and asserts it streams without a 400. Fake-model green is necessary, not sufficient."
     owner: "Amelia (Dev)"
