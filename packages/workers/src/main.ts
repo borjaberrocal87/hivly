@@ -18,6 +18,7 @@ import { MAX_CHUNK_SIZE } from './indexer/chunking.js';
 import { MAX_GROUPING_WINDOW } from './indexer/grouping.js';
 import { createLogger, type Logger } from './logger.js';
 import { runSync } from './sync/consumer.js';
+import { resolveStreamsConfig, runStreamTrimmer } from './trim/streamTrimmer.js';
 
 /** Read a required secret from the environment; abort if unset (AD-8, before any I/O). */
 function requireEnv(name: string): string {
@@ -139,6 +140,10 @@ async function main(): Promise<void> {
   // header). Both stay undefined when config.sync.enabled is false.
   let syncRedisUpdated: RedisClient | undefined;
   let syncRedisDeleted: RedisClient | undefined;
+  // Stream trimmer (Story OPS-1) — its own client (must not share a blocking
+  // consumer loop's connection). Stays undefined when streams.trim_enabled is false.
+  let trimmerPromise: Promise<void> = Promise.resolve();
+  let trimRedis: RedisClient | undefined;
   const shutdown = (signal: string): void => {
     if (shuttingDown) return;
     shuttingDown = true;
@@ -151,7 +156,9 @@ async function main(): Promise<void> {
         // batch. `.catch` neutralises a late rejection losing the race —
         // `main()`'s own `await` below already ignores it once shutdown started.
         await Promise.race([
-          Promise.all([indexerPromise, syncPromise].map((p) => p.catch(() => undefined))),
+          Promise.all(
+            [indexerPromise, syncPromise, trimmerPromise].map((p) => p.catch(() => undefined)),
+          ),
           new Promise<void>((resolve) => setTimeout(resolve, 7_000)),
         ]);
         // Await quit() so any in-flight command flushes, bounded so a stuck socket
@@ -160,6 +167,7 @@ async function main(): Promise<void> {
         await quitRedisBounded(redis, 5_000);
         if (syncRedisUpdated) await quitRedisBounded(syncRedisUpdated, 5_000);
         if (syncRedisDeleted) await quitRedisBounded(syncRedisDeleted, 5_000);
+        if (trimRedis) await quitRedisBounded(trimRedis, 5_000);
         // pg's Pool.end() takes no timeout arg; bound it so a stuck pool can't
         // block shutdown past 10s (the finally still exits regardless).
         await Promise.race([
@@ -229,8 +237,19 @@ async function main(): Promise<void> {
     });
   }
 
+  // Story OPS-1: the stream trimmer runs concurrently, gated by
+  // streams.trim_enabled (default on). Its own Redis client — a blocking consumer
+  // loop's connection cannot be shared (see streamTrimmer.ts's header).
+  if (resolveStreamsConfig(config).enabled) {
+    trimRedis = createRedisClient(redisUrl);
+    if (!(await connectRedisOrExit(trimRedis, logger, 'trimmer', () => shuttingDown))) return;
+    trimmerPromise = runStreamTrimmer({ redis: trimRedis, config, logger, signal: shutdownSignal.signal });
+  } else {
+    logger.info('stream trimming disabled — not starting trimmer');
+  }
+
   try {
-    await Promise.all([indexerPromise, syncPromise]);
+    await Promise.all([indexerPromise, syncPromise, trimmerPromise]);
   } catch (err) {
     // A rejection surfacing after shutdown() already began is expected (a loop
     // was aborted mid-flight) — shutdown() owns the exit path from here. Still

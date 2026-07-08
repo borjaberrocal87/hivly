@@ -105,6 +105,44 @@ describe('loadConfig', () => {
     expect(config.security.rate_limit.auth.max_requests).toBe(10);
     expect(config.security.rate_limit.chat.max_requests).toBe(20);
     expect(config.notifications).toBeUndefined();
+    expect(config.streams).toBeUndefined();
+  });
+
+  it('should parse an optional streams block when present', () => {
+    const yaml = `${VALID_YAML}streams:\n  trim_enabled: true\n  trim_interval_ms: 300000\n  max_len: null\n`;
+    const path = writeFixture('streams.yml', yaml);
+
+    const config = loadConfig(path);
+
+    expect(config.streams).toEqual({ trim_enabled: true, trim_interval_ms: 300000, max_len: null });
+  });
+
+  it('should accept a numeric streams.max_len ceiling', () => {
+    const yaml = `${VALID_YAML}streams:\n  trim_enabled: false\n  trim_interval_ms: 60000\n  max_len: 500000\n`;
+    const path = writeFixture('streams-maxlen.yml', yaml);
+
+    const config = loadConfig(path);
+
+    expect(config.streams?.max_len).toBe(500000);
+    expect(config.streams?.trim_enabled).toBe(false);
+  });
+
+  it('should accept a PARTIAL streams block (per-field optional; defaults filled in code)', () => {
+    const yaml = `${VALID_YAML}streams:\n  trim_enabled: false\n`;
+    const path = writeFixture('streams-partial.yml', yaml);
+
+    const config = loadConfig(path);
+
+    expect(config.streams).toEqual({ trim_enabled: false });
+    expect(config.streams?.trim_interval_ms).toBeUndefined();
+    expect(config.streams?.max_len).toBeUndefined();
+  });
+
+  it('should reject a non-positive streams.trim_interval_ms', () => {
+    const yaml = `${VALID_YAML}streams:\n  trim_enabled: true\n  trim_interval_ms: 0\n  max_len: null\n`;
+    const path = writeFixture('streams-bad.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/trim_interval_ms|streams/);
   });
 
   it('should interpolate ${ENV_VAR} placeholders from process.env', () => {

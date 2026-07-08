@@ -61,6 +61,19 @@ sync:
   sync_on_start: true
   delete_policy: "soft" # "soft" (deleted_at) | "hard" (DELETE row)
 
+# --- Redis Streams retention (Story OPS-1) -----------------------------------
+# Bounds the Redis Streams so a long-running instance can't grow Redis memory
+# without limit. The primary trim is PEL-safe (XTRIM MINID at the oldest entry
+# still needed by any consumer group) and NEVER drops an unacked entry — it applies
+# to streams that HAVE a consumer group. max_len is an OPTIONAL APPROXIMATE (~)
+# ceiling backstop for a stuck/dead consumer (or a stream with no consumer group,
+# e.g. knowledge:events): null = off (recommended; the PEL-safe floor is the only
+# bound). Setting a number may drop pending entries when hit, and logs a warning.
+streams:
+  trim_enabled: true
+  trim_interval_ms: 300000 # 5 minutes
+  max_len: null
+
 # --- Access control / RBAC ----------------------------------------------------
 # channel_permissions is materialized into the `channel_permissions` table at
 # Backend startup; allowedChannelIds is expanded per request (AD-12), so changes

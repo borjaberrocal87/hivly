@@ -124,6 +124,18 @@ export const HivlyConfigSchema = z.object({
       webhook_url: z.string(),
     }).optional(),
   }).optional(),
+  // Redis Streams retention (Story OPS-1). The whole block AND each field are
+  // optional; resolveStreamsConfig (in @hivly/workers) supplies per-field defaults
+  // (enabled / 5-min / no-ceiling), so a config omitting the block OR setting only
+  // some fields (e.g. just `trim_enabled: false`) remains valid. Behavior only — no
+  // secrets. `max_len` is an OPTIONAL APPROXIMATE (~) ceiling backstop (null = off);
+  // the PEL-safe MINID trim is always the primary bound and never drops unacked
+  // entries.
+  streams: z.object({
+    trim_enabled: z.boolean().optional(),
+    trim_interval_ms: z.number().int().positive().optional(),
+    max_len: z.number().int().positive().nullable().optional(),
+  }).optional(),
 }).superRefine((config, ctx) => {
   // A "custom" provider is an arbitrary OpenAI-compatible endpoint, so it is
   // meaningless without a base_url. Enforce a non-empty base_url for both the
