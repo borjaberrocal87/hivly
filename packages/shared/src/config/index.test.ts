@@ -65,6 +65,21 @@ security:
       max_requests: 20
   allowed_origins:
     - "http://localhost:5173"
+enrichment:
+  language: "en"
+  llm:
+    provider: "anthropic"
+    model: "claude-sonnet-4-6"
+    temperature: 0.3
+    api_key: "sk-ant-enrichment-test"
+  fetch:
+    timeout_ms: 5000
+    max_bytes: 2000000
+    max_redirects: 3
+    user_agent: "HivlyBot/1.0"
+    allowed_schemes:
+      - "https"
+    block_private_ips: true
 `;
 
 describe('loadConfig', () => {
@@ -106,6 +121,12 @@ describe('loadConfig', () => {
     expect(config.security.rate_limit.chat.max_requests).toBe(20);
     expect(config.notifications).toBeUndefined();
     expect(config.streams).toBeUndefined();
+    expect(config.enrichment.language).toBe('en');
+    expect(config.enrichment.llm.provider).toBe('anthropic');
+    expect(config.enrichment.llm.api_key).toBe('sk-ant-enrichment-test');
+    expect(config.enrichment.fetch.timeout_ms).toBe(5000);
+    expect(config.enrichment.fetch.allowed_schemes).toEqual(['https']);
+    expect(config.enrichment.fetch.block_private_ips).toBe(true);
   });
 
   it('should parse an optional streams block when present', () => {
@@ -358,5 +379,96 @@ describe('loadConfig', () => {
     const config = loadConfig(path);
 
     expect(config.notifications).toBeUndefined();
+  });
+
+  it('should reject a config missing the enrichment block (required, Epic 7)', () => {
+    const yaml = VALID_YAML.replace(
+      /enrichment:[\s\S]*?block_private_ips: true\n/,
+      '',
+    );
+    const path = writeFixture('missing-enrichment.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/enrichment/);
+  });
+
+  it('should reject enrichment.llm.provider "custom" without a base_url, naming base_url', () => {
+    const yaml = VALID_YAML.replace(
+      'llm:\n    provider: "anthropic"',
+      'llm:\n    provider: "custom"',
+    );
+    const path = writeFixture('enrichment-custom-no-url.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/enrichment.*base_url|base_url.*enrichment/);
+  });
+
+  it('should accept enrichment.llm.provider "custom" when base_url is present', () => {
+    const yaml = VALID_YAML.replace(
+      'llm:\n    provider: "anthropic"\n    model: "claude-sonnet-4-6"',
+      'llm:\n    provider: "custom"\n    base_url: "https://llm.internal/v1"\n    model: "claude-sonnet-4-6"',
+    );
+    const path = writeFixture('enrichment-custom-ok.yml', yaml);
+
+    const config = loadConfig(path);
+
+    expect(config.enrichment.llm.provider).toBe('custom');
+    expect(config.enrichment.llm.base_url).toBe('https://llm.internal/v1');
+  });
+
+  it('should reject an empty enrichment.language', () => {
+    const yaml = VALID_YAML.replace('language: "en"', 'language: ""');
+    const path = writeFixture('enrichment-empty-language.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/language/);
+  });
+
+  it('should reject an invalid enrichment.fetch.allowed_schemes entry', () => {
+    const yaml = VALID_YAML.replace(
+      'allowed_schemes:\n      - "https"',
+      'allowed_schemes:\n      - "ftp"',
+    );
+    const path = writeFixture('enrichment-bad-scheme.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/allowed_schemes/);
+  });
+
+  it('should reject a non-positive enrichment.fetch.timeout_ms', () => {
+    const yaml = VALID_YAML.replace('timeout_ms: 5000', 'timeout_ms: 0');
+    const path = writeFixture('enrichment-bad-timeout.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/timeout_ms/);
+  });
+
+  it('should reject a non-positive enrichment.fetch.max_bytes', () => {
+    const yaml = VALID_YAML.replace('max_bytes: 2000000', 'max_bytes: 0');
+    const path = writeFixture('enrichment-bad-max-bytes.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/max_bytes/);
+  });
+
+  it('should reject a non-empty invalid enrichment.llm.base_url', () => {
+    const yaml = VALID_YAML.replace(
+      'api_key: "sk-ant-enrichment-test"',
+      'api_key: "sk-ant-enrichment-test"\n    base_url: "not-a-url"',
+    );
+    const path = writeFixture('enrichment-bad-base-url.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/base_url/);
+  });
+
+  it('should reject an empty enrichment.fetch.allowed_schemes list', () => {
+    const yaml = VALID_YAML.replace(
+      'allowed_schemes:\n      - "https"',
+      'allowed_schemes: []',
+    );
+    const path = writeFixture('enrichment-empty-schemes.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/allowed_schemes/);
+  });
+
+  it('should reject a negative enrichment.fetch.max_redirects', () => {
+    const yaml = VALID_YAML.replace('max_redirects: 3', 'max_redirects: -1');
+    const path = writeFixture('enrichment-bad-max-redirects.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/max_redirects/);
   });
 });

@@ -73,6 +73,33 @@
 - **Action:** keep the annotation on Story 5.4's AC and UX-DR20 ("deferred to future
   agentic-capabilities epic"); promote to a proper epic if/when Hivly development resumes.
 
+## Deploy runbooks
+
+### Epic 7 clean-slate migration (Story 7.1 — resource-index pivot)
+> Added 2026-07-09. One-time runbook for the `embeddings.content` → `title/description/link`
+> destructive migration (`0003_bent_mandrill.sql`, D1/D2). Re-run this exact sequence on every
+> environment (staging/prod) the migration has not yet touched.
+
+1. Stop the app containers so nothing writes through the migration window:
+   `docker compose stop backend bot workers` (leave `postgres`/`redis` up — OPS-2 competing-writer guard).
+2. Truncate in FK-safe order (D1 extends the wipe to `conversations`/`messages` because
+   `Citation.link` is a required field legacy rows lack — a stale row would fail Zod parse):
+   `TRUNCATE user_read_status, messages, conversations, embeddings, discord_messages;`
+   (`user_read_status` before `embeddings`; `messages` before `conversations` — both have plain
+   `no action` FKs, no cascade.)
+3. Apply the migration: `npx drizzle-kit migrate` (or let the compose `migrator` one-shot service
+   run it on the next `docker compose up`). **Step 2 MUST have run first — even on the `migrator`
+   path.** The migration is `ADD COLUMN … NOT NULL` with no default; against a non-empty `embeddings`
+   table it aborts, the one-shot `migrator` exits non-zero, and every app service
+   (`depends_on: migrator service_completed_successfully`) fails to start. On a fresh environment the
+   table is already empty; on any environment with prior data, truncate before letting `migrator` run.
+4. Verify: `docker exec -it <postgres-container> psql -U hivly -d hivly -c '\d embeddings'` — expect
+   `title/description/link text NOT NULL`, no `content` column, indexes unchanged.
+5. Restart the app containers and let the Bot re-run its historical backfill — every message is
+   reprocessed by the (from Story 7.2 onward) URL-extraction/fetch/AI-enrichment pipeline. Until 7.2
+   ships, workers/backend write the Placeholder-policy values (`title:''`, `description:<old content>`,
+   `link:''`) — expected and boring, not a bug.
+
 ## Standing Definition-of-Done (adopted practices, not tasks)
 
 > Consolidated 2026-07-08 (bmad-help housekeeping). These are process norms surfaced across the Epic

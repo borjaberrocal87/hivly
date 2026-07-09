@@ -124,6 +124,32 @@ export const HivlyConfigSchema = z.object({
       webhook_url: z.string(),
     }).optional(),
   }).optional(),
+  // Enrichment pipeline (Epic 7 pivot). REQUIRED — unlike `notifications`/`streams`,
+  // this is the core of the resource-index pivot; the Story 7.2 Indexer cannot run
+  // without it. `language` is the AI output language (behavior, so it lives here in
+  // YAML, not `.env`). `llm` mirrors the `agent` block's shape (minus max_iterations/
+  // memory_window, which are agent-only); `fetch` bounds the outbound URL fetch the
+  // Indexer performs (SSRF mitigations land in Story 7.2 — this just validates config).
+  enrichment: z.object({
+    language: z.string().min(1, 'enrichment.language cannot be empty'),
+    llm: z.object({
+      provider: z.enum(['anthropic', 'openai', 'custom']),
+      model: z.string().min(1, 'enrichment.llm.model cannot be empty'),
+      temperature: z.number(),
+      base_url: z.string().refine(val => val === '' || /^https?:\/\//.test(val), {
+        message: 'enrichment.llm.base_url must be empty or a valid HTTP(S) URL',
+      }).optional(),
+      api_key: z.string().min(1, 'enrichment.llm.api_key cannot be empty'),
+    }),
+    fetch: z.object({
+      timeout_ms: z.number().int().positive(),
+      max_bytes: z.number().int().positive(),
+      max_redirects: z.number().int().nonnegative(),
+      user_agent: z.string().min(1, 'enrichment.fetch.user_agent cannot be empty'),
+      allowed_schemes: z.array(z.enum(['http', 'https'])).nonempty(),
+      block_private_ips: z.boolean(),
+    }),
+  }),
   // Redis Streams retention (Story OPS-1). The whole block AND each field are
   // optional; resolveStreamsConfig (in @hivly/workers) supplies per-field defaults
   // (enabled / 5-min / no-ceiling), so a config omitting the block OR setting only
@@ -149,6 +175,13 @@ export const HivlyConfigSchema = z.object({
         message: `${block}.base_url is required when provider is "custom"`,
       });
     }
+  }
+  if (config.enrichment.llm.provider === 'custom' && !config.enrichment.llm.base_url?.trim()) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['enrichment', 'llm', 'base_url'],
+      message: 'enrichment.llm.base_url is required when provider is "custom"',
+    });
   }
 
   // A duplicated ENABLED channel id (copy-paste error) would backfill the same
@@ -195,6 +228,7 @@ export const HivlyConfigSchema = z.object({
 
 export type HivlyConfig = z.infer<typeof HivlyConfigSchema>;
 export type NotificationsConfig = NonNullable<HivlyConfig['notifications']>;
+export type EnrichmentConfig = HivlyConfig['enrichment'];
 
 const DEFAULT_CONFIG_FILE = 'Hivly.config.yml';
 const ENV_PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;

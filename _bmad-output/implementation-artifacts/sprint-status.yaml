@@ -41,7 +41,13 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-08
+last_updated: 2026-07-09  # story 7-1 → done (bmad-code-review)
+# story 7-1 ready-for-dev → review (bmad-dev-story 2026-07-09): shared kernel pivoted to the resource-index contract (embeddings: content → title/description/link; migration 0003_bent_mandrill.sql generated+applied+verified locally after a full FK-safe wipe; search/documents/citation/sse contracts swapped; required enrichment config block added to HivlyConfigSchema + createChatModel widened to ChatModelConfig). Mechanical Placeholder-policy ripples applied across workers/backend/web (zero new behavior) + docs synced (data-model, api-spec, ARCHITECTURE-SPINE, TECHNICAL-DESIGN, epics.md Épico 7 appended, PRD scope note). Gate green: lint 0 / 685 unit+web / build clean (5 pkgs) / 110 integration (backend+bot+workers; 1 transient login-flow flake on first parallel run, green on isolated + full re-run) / 13 e2e chromium unchanged pass count. No new deps. Unblocks Story 7.2 (workers/indexer URL-extraction+fetch+AI-enrichment pipeline).
+# epic-7 flipped backlog → in-progress and 7-1 → ready-for-dev on story creation (bmad-create-story 2026-07-09).
+# Story 7.1 forks confirmed with Borja: Citation.link REQUIRED (clean-slate runbook extended to
+# conversations+messages), link values validated empty-or-URL (base_url refine convention, tolerates
+# '' placeholders until 7.2), enrichment config block REQUIRED (not optional), and 7.1 carries the
+# pending Phase-0 doc edits (data-model/api-spec/SPINE/TECHNICAL-DESIGN/epics.md FR5+Épico 7/PRD).
 # action_items triage 2026-07-08 (bmad-help housekeeping): flipped 12 stale/standing items → done. Group A (5, delivered but unflipped): epic-1 graceful-shutdown (Story 6.4), epic-3 + epic-6 P1.1 MAXLEN (ops-1), epic-6 P1.2 test-isolation (ops-2), epic-3 patch-as-new-code (adopted). Group B (7 standing DoD norms — no completion, re-arm per story): consolidated into operational-backlog.md § Standing Definition-of-Done. Remaining open = 4 genuine backlog items only (epic-2 carried debt → deferred-work.md; epic-3 transactional outbox → P2.1; epic-5 + epic-6 trace panel → F1).
 # epic-6 development_status flipped in-progress → done 2026-07-08 (bmad-help housekeeping). All 4 stories (6-1…6-4) + epic-6-retrospective already done; the flag was left unflipped after the retro (same pattern as epic-4). Roadmap complete: epics 1–6 all done. Only the post-roadmap operational backlog (ops-N + P2/F1 in operational-backlog.md) and the deferred items remain outside the epic sequence.
 # story 6-4 review → done (bmad-code-review 2026-07-08): 3 adversarial layers (Blind + Edge + Auditor, Opus 4.8). 2 decision-needed (both resolved w/ Borja → patch), 5 patches applied, 3 dismissed. Patches: (1) notifier formatText redacts `://user:pass@`→`://***@` + caps length (AC-1 secret-leak + Telegram 4096 drop); (2) fatal handlers guard on isShuttingDown() so an uncaughtException mid-drain can't abort the clean shutdown / fire a spurious alert (backend exposes it from createGracefulShutdown; bot/workers hoist their shuttingDown flag); (3) workers stop_grace_period 30s→35s (sequential drain = 7s loops + 3×5s redis.quit + 10s db.end = 32s > 30s; backend/bot stay 30s); (4) trust-proxy gated on opts.rateLimit so it's OFF in tests/e2e per note #6. Dismissed: rate-limit "chat tier dead" (false positive — api & chat are complementary burst-vs-sustained caps, matches AC-2 path map), post-uncaughtException 5s window (spec-sanctioned note #9), fetch-reason URL leak (undici msgs don't embed the URL). Gate: lint 0 / 640 unit+web (+3) / build clean / backend-integration 87 pass + security 6/6 (2 pre-existing rbac failures unchanged).
@@ -187,8 +193,8 @@ development_status:
   # Post-roadmap product pivot: index ONLY messages containing a URL, one embedding
   # per URL enriched with AI title+description, stored with its link; drop `content`
   # + grouping/chunking. Approved by Borja incl. destructive migration + full re-index.
-  epic-7: backlog
-  7-1-shared-modelo-datos-contratos-config-enriquecimiento: backlog
+  epic-7: in-progress
+  7-1-shared-modelo-datos-contratos-config-enriquecimiento: done
   7-2-workers-indexer-extraccion-urls-fetch-ssrf-generacion-ia: backlog
   7-3-workers-sync-reindexacion-por-diff-de-links-y-purgado: backlog
   7-4-backend-proyeccion-search-documents-rag-citas-seed: backlog
