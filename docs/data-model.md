@@ -43,17 +43,29 @@ Raw Discord messages captured by the Bot. The Bot is the only writer.
 **Notes:** the Bot tracks `last_seen_message_id` per channel (the highest snowflake seen) to reconcile backfill after downtime.
 
 ### 2. embeddings
-Vector index over grouped/chunked message content. Written by the Workers; read by the Backend for search and RAG.
+One row per curated resource link extracted from a Discord message (Epic 7 — AI-curated resource
+index; supersedes the pre-Epic-7 grouped/chunked-content model). Written by the Workers; read by
+the Backend for search, documents, and RAG.
 
 **Fields:**
 - `id`: UUID (Primary Key)
-- `content`: chunk text (concatenated from grouped messages)
+- `chunk_key`: deterministic dedup key, `"<messageId>:<urlIndex>"` — one key per URL of one
+  message (message snowflakes are globally unique, so the channel is implicit and never part of
+  the key). Unique-indexed (`idx_embeddings_chunk_key`); this is the UPSERT target, not `id`.
+- `title`: AI-generated title for the linked resource (Story 7.2)
+- `description`: AI-generated description for the linked resource (Story 7.2)
+- `link`: the extracted URL (Story 7.2). Empty string (`''`) is a valid placeholder pre-7.2 —
+  there is intentionally **no** unique index on `link` (placeholders would collide; `chunk_key` is
+  the dedup key)
 - `embedding`: `vector(N)` where `N = embeddings.dimensions` (pgvector; parametrized at deploy-time, default 1536)
 - `channel_id`: Discord channel snowflake (used for the RBAC filter)
-- `message_ids`: `string[]` of source Discord snowflakes contributing to the chunk
+- `message_ids`: `string[]`, length 1 — `message_ids[0]` is the anchor message the Search/Docs
+  projection joins against (the array shape is kept for compatibility with the pre-Epic-7 model,
+  which allowed multiple grouped messages per row)
 - `created_at`: timestamp
 
-**Notes:** Workers are idempotent — re-processing must UPSERT on `id`, never error (at-least-once delivery, AD-13).
+**Notes:** Workers are idempotent — re-processing must UPSERT on `chunk_key` (the unique index),
+never on `id`, and never error (at-least-once delivery, AD-13).
 
 ### 3. users
 Application users, created on Discord OAuth2 login. Backend-owned.
@@ -102,7 +114,7 @@ Individual messages within a conversation (user / assistant / system), with cita
 - `conversation_id`: FK → conversations.id
 - `role`: `"user" | "assistant" | "system"`
 - `content`: message text
-- `citations`: `jsonb` array of sources (channel, author, date)
+- `citations`: `jsonb` array of sources (`channel`, `author`, `date`, `link` — Epic 7)
 - `created_at`: timestamp
 
 ### 8. user_read_status
@@ -130,10 +142,13 @@ erDiagram
     }
     embeddings {
         uuid id PK
-        text content "Text fragment"
+        string chunk_key UK "messageId:urlIndex"
+        text title "AI-generated"
+        text description "AI-generated"
+        text link "extracted URL"
         vector embedding "N dims (embeddings.dimensions)"
         string channel_id
-        string[] message_ids
+        string[] message_ids "length 1 — [0] is the anchor"
         timestamp created_at
     }
     users {
@@ -185,6 +200,9 @@ erDiagram
 ## Critical Indexes
 
 ```sql
+-- Idempotency / UPSERT target (AD-13) — stale/omitted since Story 3.3, documented here
+CREATE UNIQUE INDEX idx_embeddings_chunk_key ON embeddings(chunk_key);
+
 -- Vector search (HNSW, cosine)
 CREATE INDEX idx_embeddings_vector ON embeddings USING hnsw (embedding vector_cosine_ops);
 

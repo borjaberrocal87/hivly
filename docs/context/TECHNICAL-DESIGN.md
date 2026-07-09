@@ -400,10 +400,13 @@ erDiagram
 
     embeddings {
         uuid id PK
-        text content "Fragmento de texto"
+        string chunk_key UK "messageId:urlIndex"
+        text title "generado por IA"
+        text description "generado por IA"
+        text link "URL extraída"
         vector embedding "N dims (embeddings.dimensions)"
         string channel_id
-        string[] message_ids
+        string[] message_ids "largo 1 — [0] es el ancla"
         timestamp created_at
     }
 
@@ -441,7 +444,7 @@ erDiagram
         uuid conversation_id FK
         string role "user | assistant | system"
         text content
-        jsonb citations "Array de fuentes"
+        jsonb citations "Array de fuentes (channel, author, date, link)"
         timestamp created_at
     }
 
@@ -461,6 +464,9 @@ erDiagram
 **Índices críticos:**
 
 ```sql
+-- Idempotencia / UPSERT target (AD-13)
+CREATE UNIQUE INDEX idx_embeddings_chunk_key ON embeddings(chunk_key);
+
 -- Búsqueda vectorial
 CREATE INDEX idx_embeddings_vector ON embeddings USING hnsw (embedding vector_cosine_ops);
 
@@ -481,7 +487,15 @@ CREATE INDEX idx_user_read_status_embedding ON user_read_status(embedding_id);
 
 ## 7. Pipeline de ingestión
 
-El flujo completo desde que un mensaje aparece en Discord hasta que es buscable:
+> **Superseded (Epic 7).** El pipeline de agrupación/chunking descrito abajo (grouping_window,
+> chunk_size, chunk_overlap → `embeddings.content`) corresponde al diseño pre-Epic-7. El pivote a
+> índice curado de recursos (Story 7.1 — este documento) reemplaza `content` por
+> `title`+`description`+`link` por URL extraída; la reescritura completa de este pipeline
+> (extracción de URLs, fetch con guarda SSRF, generación IA) llega en la Historia 7.2 — ver
+> `_bmad-output/planning-artifacts/sprint-change-proposal-2026-07-09.md` §4.1.
+
+El flujo completo desde que un mensaje aparece en Discord hasta que es buscable (diseño
+pre-Epic-7; reescrito en la Historia 7.2):
 
 ```mermaid
 sequenceDiagram
@@ -667,7 +681,7 @@ El nodo `respond` hace streaming token a token al cliente vía SSE. El wire form
 ```
 data: {"type":"token","content":"La"}
 data: {"type":"token","content":" respuesta"}
-data: {"type":"citation","channel":"#general","author":"usuario","date":"2026-01-15"}
+data: {"type":"citation","channel":"#general","author":"usuario","date":"2026-01-15","link":"https://..."}
 data: {"type":"done","conversationId":"uuid-..."}
 ```
 
@@ -809,7 +823,7 @@ async function* streamChat(message: string, conversationId?: string) {
 ```typescript
 export type SSEFrame =
   | { type: 'token';    content: string }
-  | { type: 'citation'; channel: string; author: string; date: string }
+  | { type: 'citation'; channel: string; author: string; date: string; link: string }
   | { type: 'done';     conversationId: string }
   | { type: 'error';    code: string; message: string }
 ```
@@ -877,6 +891,24 @@ knowledge:
   chunk_size: 500
   chunk_overlap: 50
   grouping_window: 10
+
+# Enrichment pipeline (Epic 7 — índice curado de recursos). REQUERIDO desde la
+# Historia 7.1; el Indexer de la Historia 7.2 lo necesita para extraer/fetch/generar.
+enrichment:
+  language: "es"             # idioma de salida de title/description generados por IA
+  llm:
+    provider: "anthropic"    # anthropic | openai | custom
+    model: "claude-sonnet-4-6"
+    temperature: 0.3
+    base_url: "${ENRICHMENT_LLM_BASE_URL}"  # opcional; OBLIGATORIO si provider: custom
+    api_key: "${ENRICHMENT_LLM_API_KEY}"
+  fetch:
+    timeout_ms: 5000
+    max_bytes: 2000000
+    max_redirects: 3
+    user_agent: "HivlyBot/1.0"
+    allowed_schemes: ["https"]
+    block_private_ips: true  # mitigación SSRF (Historia 7.2)
 
 sync:
   enabled: true

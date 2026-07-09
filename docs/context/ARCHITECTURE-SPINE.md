@@ -62,19 +62,21 @@ graph TD
 
 - **Binds:** packages/backend (endpoint `POST /api/chat`), packages/web (cliente de chat)
 - **Prevents:** complejidad de autenticación WebSocket; configuración extra de nginx; divergencia en el wire format del stream entre cliente y servidor
-- **Rule:** El endpoint `POST /api/chat` devuelve `Content-Type: text/event-stream`. El cliente usa `fetch` con streaming (no `EventSource`, para poder hacer POST con body). No hay upgrade de protocolo WebSocket. El wire format de cada frame SSE es JSON con los tipos: `{"type":"token","content":"…"}` · `{"type":"citation","channel":"…","author":"…","date":"…"}` · `{"type":"done","conversationId":"…"}` · `{"type":"error","code":"…","message":"…"}`. Este schema está definido en `packages/shared/src/schemas/sse.ts`.
+- **Rule:** El endpoint `POST /api/chat` devuelve `Content-Type: text/event-stream`. El cliente usa `fetch` con streaming (no `EventSource`, para poder hacer POST con body). No hay upgrade de protocolo WebSocket. El wire format de cada frame SSE es JSON con los tipos: `{"type":"token","content":"…"}` · `{"type":"citation","channel":"…","author":"…","date":"…","link":"…"}` · `{"type":"done","conversationId":"…"}` · `{"type":"error","code":"…","message":"…"}`. El campo `link` del frame `citation` es REQUERIDO (Epic 7, Story 7.1); tolera `''` (vacío) como placeholder hasta que la Historia 7.2 extraiga URLs reales. Este schema está definido en `packages/shared/src/schemas/sse.ts`.
 
 ### AD-5 — Drizzle ORM como capa de acceso a DB
 
 - **Binds:** packages/shared, packages/bot, packages/backend, packages/workers
 - **Prevents:** definiciones de tabla duplicadas o divergentes entre servicios; migraciones en lenguajes o herramientas distintas
 - **Rule:** El schema de todas las tablas se define en `packages/shared/src/db/schema.ts` con Drizzle. Las migraciones se generan con `drizzle-kit` como SQL explícito. Ningún servicio define tablas ni hace DDL fuera de `packages/shared`. Las queries a pgvector usan la extensión de vector de drizzle-orm. La dimensión de la columna `vector` (tabla `embeddings`) se parametriza a **deploy-time** desde `embeddings.dimensions` (leída por `schema.ts` en generate-time con un lector mínimo de YAML, no `loadConfig()`); `schema.ts` sigue siendo la fuente de verdad del DDL. Cambiar la dimensión con datos ya indexados exige migración + re-indexado completo.
+- **Nota (Epic 7, Story 7.1):** la tabla `embeddings` pasó de `content` (texto agrupado/chunkeado) a `title`+`description`+`link` (un recurso por URL, generados por IA en la Historia 7.2). `chunk_key` cambió su semántica a `"<messageId>:<urlIndex>"` (antes `"<firstMessageId>:<chunkIndex>"`, Story 3.3) pero sigue siendo el único índice/target de UPSERT (AD-13) — la migración `0003_*` es destructiva (`DROP COLUMN content` + `ADD COLUMN … NOT NULL`) y exige el runbook de wipe-completo documentado en la Historia 7.1.
 
 ### AD-6 — Contrato API mediante Zod schemas en shared
 
 - **Binds:** packages/backend (validación runtime), packages/web (tipos TypeScript)
 - **Prevents:** divergencia silenciosa entre shapes de request/response del frontend y backend
 - **Rule:** Todo shape de request o response de la API REST está definido como Zod schema en `packages/shared/src/schemas/`. El backend valida con `schema.parse()`; el frontend infiere tipos con `z.infer<typeof schema>`. Ningún servicio define shapes de API localmente.
+- **Nota (Epic 7, Story 7.1):** `SearchFragmentSchema`/`DocumentFragmentSchema` reemplazan `content` por `title`+`description`+`link`; `CitationSchema` gana `link` (requerido). `link` usa la misma convención "empty-or-URL" que `base_url` en `config/index.ts` (`z.string().refine(v => v === '' || /^https?:\/\//.test(v), …)`) — **nunca** `z.url()` estricto, porque hasta la Historia 7.2 los valores mecánicos/seeds usan `link: ''`.
 
 ### AD-7 — nginx como punto de entrada HTTP único
 
@@ -124,6 +126,13 @@ graph TD
 | `hivly:discord:messages:updated` | bot | `hivly:sync` | workers/sync |
 | `hivly:discord:messages:deleted` | bot | `hivly:sync` | workers/sync |
 | `hivly:knowledge:events` | bot (desde 3.2: `discord.backfill.completed`); workers *(Epic 6)* | `hivly:notifier` | notifier *(deferred — Epic 6)* |
+
+**Nueva capacidad de ingesta (Epic 7, Story 7.1 — config; comportamiento en Story 7.2):** el Worker
+Indexer va a realizar fetch saliente de las URLs extraídas de cada mensaje (timeout, tope de
+tamaño, límite de redirects, allowlist de esquemas y bloqueo de IPs privadas — mitigación SSRF) y
+una llamada generativa a un LLM (`enrichment.llm`) para producir `title`+`description` en el
+idioma de `enrichment.language`. El bloque `enrichment` requerido en `HivlyConfigSchema` (`config/
+index.ts`) valida esta configuración desde ya; el fetch/LLM en sí lo implementa la Historia 7.2.
 
 Campos mínimos obligatorios en cada mensaje de stream: `messageId` (snowflake string), `channelId` (string), `guildId` (string), `timestamp` (ISO 8601). Los tipos de evento están definidos en `packages/shared/src/types/events.ts`. Los Workers hacen ACK (`XACK`) solo tras procesar con éxito; no hacen ACK si el procesamiento falla (permite reintento automático por otro consumer del mismo group).
 

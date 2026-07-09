@@ -67,7 +67,16 @@ Este documento define el **sistema core de Hivly** que cada operador despliega e
 
 ## 1. Resumen ejecutivo
 
-Hivly es un agente de IA que **indexa automáticamente el conocimiento de una comunidad de Discord** leyendo mensajes de canales seleccionados y respondiendo preguntas en lenguaje natural con fuentes verificables.
+Hivly es un agente de IA que **cura automáticamente un índice de recursos (enlaces) de una comunidad de Discord**: solo los mensajes que contienen una URL se indexan — cada enlace se enriquece con un título y una descripción generados por IA — y responde preguntas en lenguaje natural citando esos recursos con fuentes verificables.
+
+> **Nota de alcance (2026-07-09, Epic 7 — pivote a índice curado):** el sistema ya NO indexa el
+> texto de cualquier mensaje. Solo los mensajes con al menos una URL entran al índice; el
+> contenido no-enlazado deja de ser buscable/citable. El `Fragmento` (glosario, §Definiciones)
+> pasa de ser "un chunk de texto agrupado" a ser "un recurso (`title`+`description`+`link`) por
+> URL indexada" — ver `docs/data-model.md` §embeddings y
+> `_bmad-output/planning-artifacts/sprint-change-proposal-2026-07-09.md` para el detalle completo
+> del pivote. El resto de este documento describe el diseño pre-pivote y se actualiza
+> incrementalmente a medida que las Historias 7.2–7.6 lo reemplazan.
 
 Cada operador despliega una instancia independiente que sirve a **una comunidad de Discord** (un guild). La configuración se realiza mediante `Hivly.config.yml` y el sistema se levanta con `docker compose up -d`.
 

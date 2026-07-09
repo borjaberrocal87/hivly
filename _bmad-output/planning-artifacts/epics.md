@@ -21,23 +21,23 @@ FR1: El bot de Discord debe conectar al Gateway y escuchar eventos `messageCreat
 FR2: El bot debe realizar backfill de mensajes históricos al iniciar, partiendo del `last_seen_message_id` por canal (snowflake) o desde `backfill_limit` si es el primer arranque. Cada canal se procesa secuencialmente.
 FR3: El bot debe detectar ediciones de mensajes (`messageUpdate`) en canales habilitados y publicar el evento `discord.message.updated` a Redis Streams para re-indexación.
 FR4: El bot debe detectar borrados de mensajes (`messageDelete`) en canales habilitados y publicar el evento `discord.message.deleted` a Redis Streams para purgado (soft o hard según `delete_policy`).
-FR5: El Worker Indexer debe consumir eventos de `hivly:discord:messages`, agrupar mensajes consecutivos por canal (`grouping_window`), dividirlos en fragmentos (`chunk_size`, `chunk_overlap`), generar embeddings con el proveedor/modelo configurado en `embeddings` (OpenAI o custom OpenAI-compatible) y almacenar en pgvector.
-FR6: El Worker Sync debe consumir eventos `discord.message.updated`: eliminar el embedding anterior y re-indexar el mensaje con el nuevo contenido.
+FR5: El Worker Indexer consume `hivly:discord:messages`, extrae las URLs del texto del mensaje y descarta el mensaje si no contiene ninguna. Por cada URL: hace fetch del recurso (con guarda SSRF, timeout y tope de tamaño), genera título y descripción con el LLM de `enrichment.llm` a partir del texto del mensaje + el contenido del recurso (con fallback a solo-texto si el fetch falla) en el idioma de `enrichment.language`, calcula el embedding de `title+description` y almacena una fila por URL en pgvector (`chunk_key = messageId:urlIndex`). Sin agrupación ni chunking.
+FR6: El Worker Sync debe consumir eventos `discord.message.updated`: re-extraer las URLs del contenido editado y reconciliar por diff de links (upsert de links nuevos/cambiados, purgado de los removidos).
 FR7: El Worker Sync debe consumir eventos `discord.message.deleted`: aplicar soft delete (`deleted_at`) o hard delete del embedding según `delete_policy`.
 FR8: El sistema debe ejecutar un sync al iniciar para detectar ediciones y borrados ocurridos mientras el bot estuvo offline (comparar Discord vs. indexados).
 FR9: El Backend debe implementar autenticación Discord OAuth2 (scopes: `identify`, `guilds.members.read`), verificar membresía en el guild y crear sesión en Redis.
 FR10: El Backend debe implementar RBAC: en cada request autenticado, expandir `discordRoles → allowedChannelIds` uniendo la sesión contra `channel_permissions`. La tabla `channel_permissions` se carga via upsert desde `Hivly.config.yml` al arrancar.
-FR11: El Backend debe proporcionar búsqueda semántica (`GET /api/search`) con filtro RBAC obligatorio en la query pgvector (`WHERE channel_id = ANY(:allowed_channel_ids)`).
-FR12: El Backend debe proporcionar un listado paginado de fragmentos indexados (`GET /api/documents`) con metadatos (canal, autor, fecha), filtrado por canales accesibles del usuario.
-FR13: El Backend debe implementar el agente RAG como LangGraph StateGraph (nodos: `retrieve → reason → respond`) con streaming SSE en `POST /api/chat`. El agente responde ÚNICAMENTE con información indexada, citando canal, autor y fecha. Si no hay información, lo indica explícitamente.
+FR11: El Backend debe proporcionar búsqueda semántica (`GET /api/search`) con filtro RBAC obligatorio en la query pgvector (`WHERE channel_id = ANY(:allowed_channel_ids)`), devolviendo `title`, `description` y `link` por resultado.
+FR12: El Backend debe proporcionar un listado paginado de recursos indexados (`GET /api/documents`) con metadatos (`title`, `description`, `link`, canal, autor, fecha), filtrado por canales accesibles del usuario.
+FR13: El Backend debe implementar el agente RAG como LangGraph StateGraph (nodos: `retrieve → reason → respond`) con streaming SSE en `POST /api/chat`. El agente responde ÚNICAMENTE con información indexada, citando canal, autor, fecha y el link del recurso. Si no hay información, lo indica explícitamente.
 FR14: El agente RAG debe mantener historial de conversación con compresión cuando supera el presupuesto de tokens (`agent.memory_window`, default 20 turnos / 4000 tokens).
 FR15: El Backend debe implementar read tracking: registrar estado de lectura por usuario y fragmento (`user_read_status`). Endpoints: marcar como leído, marcar como no leído, marcar canal completo como leído (batch de 1.000), obtener conteo de no leídos.
-FR16: La Web App debe implementar la vista de búsqueda: barra de búsqueda, resultados ordenados por relevancia, badges de estado de lectura (🔵 No leído / ✅ Leído), filtros por canal y por estado de lectura.
-FR17: La Web App debe implementar la vista de documentos: listado paginado de fragmentos indexados con badges de lectura y filtros.
+FR16: La Web App debe implementar la vista de búsqueda: barra de búsqueda, resultados (título + descripción + link al recurso) ordenados por relevancia, badges de estado de lectura (🔵 No leído / ✅ Leído), filtros por canal y por estado de lectura.
+FR17: La Web App debe implementar la vista de documentos: listado paginado de recursos indexados (título + descripción + link) con badges de lectura y filtros.
 FR18: La Web App debe implementar la vista de chat: envío de mensajes, streaming de respuestas token a token con SSE (usando `fetch`, no `EventSource`), visualización de citas.
 FR19: La Web App debe implementar la gestión de estado de lectura en sidebar: conteo de no leídos por canal, botón "marcar canal como leído".
 FR20: El sistema debe exponer `GET /health` con estado de cada componente (database, redis, discord, indexer); retorna 503 si algún componente está degradado.
-FR21: El sistema debe emitir notificaciones al operador (Telegram/Slack) para: backfill completado, nuevo contenido indexado, errores críticos, sync completado, mensajes editados/borrados.
+FR21: El sistema debe emitir notificaciones al operador (Telegram/Slack) para: backfill completado, recurso enriquecido indexado, errores críticos, sync completado, mensajes editados/borrados.
 FR22: El sistema debe ser configurable íntegramente mediante `Hivly.config.yml` (comportamiento) y `.env` (secretos), validados por `loadConfig()` al arrancar cada servicio.
 FR23: El sistema debe desplegarse con `docker compose up -d`, incluyendo el servicio `migrator` one-shot que aplica migraciones Drizzle antes de que arranquen bot, workers y backend.
 
@@ -188,6 +188,10 @@ El miembro puede hacer preguntas en lenguaje natural y recibir respuestas en str
 ### Épico 6: Sincronización, Notificaciones y Fiabilidad
 El sistema permanece preciso cuando mensajes de Discord son editados o borrados, el operador recibe notificaciones sobre eventos del sistema, y la aplicación maneja fallos de forma robusta. Incluye el Bot con listeners `messageUpdate` y `messageDelete` + sync al inicio, Workers Sync (re-indexación de ediciones, purgado por delete_policy), notificaciones Telegram/Slack para todos los eventos configurados, rate limiting completo, headers de seguridad CSP/HSTS, y graceful shutdown.
 **FRs cubiertos:** FR3, FR4, FR6, FR7, FR8, FR21
+
+### Épico 7: Índice Curado de Recursos con IA
+Convierte el KB de "todo mensaje indexado" a un índice curado de recursos: solo mensajes con URL, cada URL enriquecida por IA (título + descripción) y almacenada con su link. Reescribe la ingesta (fin de grouping/chunking, fetch saliente con guarda SSRF, paso generativo LLM) y proyecta title/description/link en search, documentos, RAG y las vistas web.
+**FRs cubiertos:** FR5, FR6, FR11, FR12, FR13, FR16, FR17, FR21
 
 ---
 
@@ -982,3 +986,26 @@ para garantizar la observabilidad, seguridad y fiabilidad operacional.
 **Y** los workers finalizan el procesamiento del mensaje en curso antes de cerrar
 **Y** el backend deja de aceptar nuevas conexiones y espera a que las activas terminen (timeout 10s)
 **Y** todas las conexiones a PostgreSQL y Redis se cierran limpiamente
+
+---
+
+## Épico 7: Índice Curado de Recursos con IA
+
+**Goal:** Convertir el KB de "todo mensaje indexado" a un índice curado de recursos: solo mensajes con
+URL, cada URL enriquecida por IA (título + descripción) y almacenada con su link. Reescribe la ingesta
+(fin de grouping/chunking, fetch saliente con guarda SSRF, paso generativo LLM) y proyecta
+title/description/link en search, documentos, RAG y las vistas web.
+
+**FRs cubiertos:** FR5, FR6, FR11, FR12, FR13, FR16, FR17, FR21
+
+> Aprobado via `bmad-correct-course` (2026-07-09,
+> `_bmad-output/planning-artifacts/sprint-change-proposal-2026-07-09.md`), clasificación **Major**,
+> migración destructiva aprobada. Las historias 7.2–7.6 se detallan (ACs Gherkin completas) cuando se
+> creen individualmente vía `bmad-create-story` — este resumen lista su alcance, no sus criterios.
+
+- **Historia 7.1 · shared:** modelo de datos + contratos + config de enriquecimiento.
+- **Historia 7.2 · workers/indexer:** extracción de URLs + UrlFetcher (SSRF) + generación IA + descarte.
+- **Historia 7.3 · workers/sync:** re-indexación por diff de links + purgado.
+- **Historia 7.4 · backend:** proyección search/documents/RAG/prompt/citas + seed e2e.
+- **Historia 7.5 · web:** SearchView/DocsView/citas render de title/description/link + UX.
+- **Historia 7.6 · e2e:** extender harness visual (patrón Epic 4) a los campos nuevos.
