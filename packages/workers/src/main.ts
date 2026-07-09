@@ -10,12 +10,12 @@
 import { loadConfig } from '@hivly/shared';
 import { createDatabase, type Database } from '@hivly/shared/db';
 import { createNotifier } from '@hivly/shared/notifier';
-import { createEmbeddingsModel } from '@hivly/shared/providers';
+import { createChatModel, createEmbeddingsModel } from '@hivly/shared/providers';
 import { createRedisClient, type RedisClient } from '@hivly/shared/redis';
 
+import { createGuardedDispatcher } from './enrichment/ssrfGuard.js';
 import { runIndexer } from './indexer/consumer.js';
 import { MAX_CHUNK_SIZE } from './indexer/chunking.js';
-import { MAX_GROUPING_WINDOW } from './indexer/grouping.js';
 import { createLogger, type Logger } from './logger.js';
 import { runSync } from './sync/consumer.js';
 import { resolveStreamsConfig, runStreamTrimmer } from './trim/streamTrimmer.js';
@@ -85,15 +85,10 @@ async function main(): Promise<void> {
   // workers process behaves exactly as before this story (AC-1).
   const notifier = createNotifier(config.notifications, logger);
 
-  // Both caps are silently applied per-batch (grouping.ts / chunking.ts) so a
-  // misconfigured value never fails a group; warn once at boot instead so an
-  // operator relying on a larger configured value isn't left guessing why.
-  if (config.knowledge.grouping_window > MAX_GROUPING_WINDOW) {
-    logger.warn('configured grouping_window exceeds the safety cap — will be clamped', {
-      configured: config.knowledge.grouping_window,
-      cap: MAX_GROUPING_WINDOW,
-    });
-  }
+  // The chunk-size cap is silently applied per-batch (chunking.ts, still used by
+  // the Sync worker until Story 7.3) so a misconfigured value never fails a
+  // batch; warn once at boot instead so an operator relying on a larger
+  // configured value isn't left guessing why.
   if (config.knowledge.chunk_size > MAX_CHUNK_SIZE) {
     logger.warn('configured chunk_size exceeds the safety cap — will be clamped', {
       configured: config.knowledge.chunk_size,
@@ -206,6 +201,12 @@ async function main(): Promise<void> {
   // Build the embeddings model from validated config (no network I/O until used).
   const embedder = createEmbeddingsModel(config.embeddings);
 
+  // AC-6: the enrichment chat model and the SSRF-guarded dispatcher are built
+  // ONCE here and injected through the pipeline — never a module-level
+  // singleton `Agent` (AC-2), mirroring the embedder injection pattern.
+  const enrichModel = createChatModel(config.enrichment.llm);
+  const guard = createGuardedDispatcher(config.enrichment.fetch);
+
   // AC-6: the Sync consumer runs concurrently with the Indexer, gated by
   // config.sync.enabled. Its two blocking loops each get their OWN Redis client
   // (two concurrent blocking reads cannot share one — see sync/consumer.ts's
@@ -222,7 +223,16 @@ async function main(): Promise<void> {
   }
 
   logger.info('indexer starting — draining hivly:discord:messages');
-  indexerPromise = runIndexer({ redis, db, embedder, config, logger, signal: shutdownSignal.signal });
+  indexerPromise = runIndexer({
+    redis,
+    db,
+    embedder,
+    config,
+    logger,
+    enrichModel,
+    guard,
+    signal: shutdownSignal.signal,
+  });
 
   if (syncRedisUpdated && syncRedisDeleted) {
     logger.info('sync starting — draining updated/deleted streams');

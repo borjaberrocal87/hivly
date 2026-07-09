@@ -1,6 +1,6 @@
 // Shared internal shapes for the Indexer pipeline. Kept separate from the pure
-// stages (events/grouping/chunking) and the orchestrator (indexBatch) so both
-// sides depend on the same definitions without a cycle.
+// stages (events/partition) and the orchestrator (indexBatch) so both sides
+// depend on the same definitions without a cycle.
 import type { MessageCreatedEvent } from '@hivly/shared/types/events';
 
 /** A raw entry as node-redis delivers it from XREADGROUP: the stream id plus the
@@ -41,17 +41,7 @@ export interface PartitionResult {
   /** Stream ids to leave PENDING (no XACK): no `discord_messages` row yet
    *  (XADD-before-COMMIT race) — retried on the next delivery. Informational. */
   pending: string[];
-  /** Entries whose row exists but is not yet indexed — proceed to group/embed. */
+  /** Entries whose row exists but is not yet indexed — proceed to the resource
+   *  pipeline (extract URLs → fetch → enrich → embed → persist). */
   toProcess: ParsedEntry[];
-}
-
-/** A by-channel group of messages to chunk + embed + upsert as one unit. */
-export interface MessageGroup {
-  channelId: string;
-  /** Message snowflakes in stream order; `messageIds[0]` seeds the chunk_key. */
-  messageIds: string[];
-  /** Stream entry ids for these messages — XACKed together on success. */
-  streamIds: string[];
-  /** Each message's content, in the same order as `messageIds`. */
-  contents: string[];
 }

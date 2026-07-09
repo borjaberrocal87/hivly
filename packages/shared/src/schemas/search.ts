@@ -4,6 +4,8 @@
 // Mirrors auth.ts.
 import { z } from 'zod';
 
+import { isEmptyOrHttpUrl, LINK_REFINE_MESSAGE } from './linkRefine.js';
+
 /** Upper bound on the raw query string. A search query is natural language; this
  * caps the text forwarded to the (paid) embeddings provider, closing a cost/DoS
  * vector on the authenticated endpoint while staying well above any real query. */
@@ -35,9 +37,7 @@ export const SearchFragmentSchema = z.object({
   id: z.uuid(),
   title: z.string(),
   description: z.string(),
-  link: z.string().refine((val) => val === '' || /^https?:\/\//.test(val), {
-    message: 'link must be empty or a valid HTTP(S) URL',
-  }),
+  link: z.string().refine(isEmptyOrHttpUrl, { message: LINK_REFINE_MESSAGE }),
   channelId: z.string(),
   channelName: z.string(),
   authorId: z.string(),

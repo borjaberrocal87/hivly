@@ -2,6 +2,8 @@
 // stable error codes the endpoint emits. Mirrors search.ts.
 import { z } from 'zod';
 
+import { isEmptyOrHttpUrl, LINK_REFINE_MESSAGE } from './linkRefine.js';
+
 /**
  * GET /api/documents query params. Query params arrive as strings, so `page`/`limit`
  * are coerced. `page` defaults to 1 (min 1); `limit` defaults to 20 (min 1, max 100).
@@ -34,9 +36,7 @@ export const DocumentFragmentSchema = z.object({
   id: z.uuid(),
   title: z.string(),
   description: z.string(),
-  link: z.string().refine((val) => val === '' || /^https?:\/\//.test(val), {
-    message: 'link must be empty or a valid HTTP(S) URL',
-  }),
+  link: z.string().refine(isEmptyOrHttpUrl, { message: LINK_REFINE_MESSAGE }),
   channelId: z.string(),
   channelName: z.string(),
   authorId: z.string(),

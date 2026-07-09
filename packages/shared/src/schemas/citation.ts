@@ -6,6 +6,7 @@
 import { z } from 'zod';
 
 import type { Citation } from '../db/schema.js';
+import { isEmptyOrHttpUrl, LINK_REFINE_MESSAGE } from './linkRefine.js';
 
 /** A single cited source: which channel, which author, when, and its link.
  * `link` tolerates '' (empty) until Story 7.2 extracts real URLs — the same
@@ -14,9 +15,7 @@ export const CitationSchema = z.object({
   channel: z.string(),
   author: z.string(),
   date: z.string(),
-  link: z.string().refine((val) => val === '' || /^https?:\/\//.test(val), {
-    message: 'link must be empty or a valid HTTP(S) URL',
-  }),
+  link: z.string().refine(isEmptyOrHttpUrl, { message: LINK_REFINE_MESSAGE }),
 });
 
 export type CitationType = z.infer<typeof CitationSchema>;

@@ -10,6 +10,8 @@ import type { Database } from '@hivly/shared/db';
 import type { RedisClient } from '@hivly/shared/redis';
 import { CONSUMER_GROUPS, STREAM_KEYS } from '@hivly/shared/types/events';
 
+import type { EnrichmentChatModel } from '../enrichment/enrich.js';
+import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import type { Logger } from '../logger.js';
 import { indexBatch } from './indexBatch.js';
 import type { Embedder, RawStreamEntry } from './types.js';
@@ -24,6 +26,9 @@ export interface RunIndexerDeps {
   embedder: Embedder;
   config: HivlyConfig;
   logger: Logger;
+  /** Built once at boot alongside the embedder — never constructed here (AC-6). */
+  enrichModel: EnrichmentChatModel;
+  guard: GuardedDispatcher;
   /** Aborted on SIGTERM/SIGINT — the loop exits at the next iteration boundary. */
   signal: AbortSignal;
 }
@@ -33,7 +38,7 @@ export interface RunIndexerDeps {
  * (≤ ~BLOCK_MS after signal, since a parked blocking read must return first).
  */
 export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
-  const { redis, db, embedder, config, logger, signal } = deps;
+  const { redis, db, embedder, config, logger, enrichModel, guard, signal } = deps;
   const stream = STREAM_KEYS.DISCORD_MESSAGES;
   const group = CONSUMER_GROUPS.INDEXER;
 
@@ -58,7 +63,7 @@ export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
     const entries = (res?.[0]?.messages ?? []) as RawStreamEntry[];
     if (entries.length === 0) break;
     logger.info('replaying pending entries', { count: entries.length });
-    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger });
+    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger, enrichModel, guard, signal });
     for (const id of ackIds) await redis.xAck(stream, group, id);
     replayId = entries[entries.length - 1].id; // move past this batch, acked or not
   }
@@ -75,7 +80,7 @@ export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
     if (!res) continue; // BLOCK timeout, no new entries
     const entries = (res[0]?.messages ?? []) as RawStreamEntry[];
     if (entries.length === 0) continue;
-    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger });
+    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger, enrichModel, guard, signal });
     for (const id of ackIds) await redis.xAck(stream, group, id);
   }
 }
