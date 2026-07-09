@@ -41,7 +41,30 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-09  # story 7-1 → done (bmad-code-review)
+last_updated: 2026-07-09  # story 7-2 in-progress → review (bmad-dev-story)
+# story 7-2 ready-for-dev → review (bmad-dev-story 2026-07-09): Indexer rewritten as the resource
+# pipeline — extractUrls (Discord angle-bracket/markdown unwrap, trailing-punctuation+balanced-
+# paren stripping, URL.href normalization) → SSRF-guarded fetchUrl (ssrfGuard.ts: node:net
+# BlockList Layer A IP-literal pre-check + undici Agent connect.lookup Layer B; manual-redirect
+# loop re-checking scheme+SSRF per hop; streaming byte-cap) → htmlText (zero-dep title/meta/OG
+# hints) → enrich (narrow EnrichmentChatModel interface, withStructuredOutput + JSON-fallback,
+# empty-result=D1 failure) → indexBatch rewritten per-message (discard no-URL/all-blocked,
+# persist resource rows in one tx, D1 LLM/embed failure=whole message un-ACKed, D2 SSRF-blocked
+# URL=skip no row). grouping.ts demolished (partitionByIndexState relocated to partition.ts);
+# main.ts builds enrichModel+guard once at boot and injects them. New dep: undici ^7.28.0
+# (workers only). Shared: link refine hardened to a URL.canParse-based check (AC-7, 7.1 review
+# deferral) in new schemas/linkRefine.ts. Gate green: lint 0 / 774 unit+web (+66) / build clean
+# (5 pkgs) / 111 integration (19 files, backend+bot+workers) / 13 e2e chromium unchanged pass
+# count. Real-LLM smoke run once locally (ENRICHMENT_SMOKE=1) against the configured custom
+# provider — non-empty title/description confirmed. Docs synced (TECHNICAL-DESIGN §7/§5.3/§17,
+# ARCHITECTURE-SPINE AD-13 + deferred batching, data-model.md, PRD.md incremental). Added
+# operational-backlog.md P2.5 (FR21 knowledge-lifecycle notification deferral). Unblocks Story
+# 7.3 (sync re-index by link-diff + purge).
+# story 7-2 backlog → ready-for-dev (bmad-create-story 2026-07-09): Indexer rewrite as the
+# resource pipeline (extractUrls + SSRF-guarded UrlFetcher + AI enrichment + discard). 4 forks
+# confirmed with Borja: LLM hard failure → no-ACK/PEL replay; SSRF-blocked URL → skipped, no row;
+# undici added as workers dep (Agent connect.lookup rebinding defense + CVE-2026-22036 pin);
+# knowledge block/chunking retired in 7.3 (sync still consumes chunkContents until then).
 # story 7-1 ready-for-dev → review (bmad-dev-story 2026-07-09): shared kernel pivoted to the resource-index contract (embeddings: content → title/description/link; migration 0003_bent_mandrill.sql generated+applied+verified locally after a full FK-safe wipe; search/documents/citation/sse contracts swapped; required enrichment config block added to HivlyConfigSchema + createChatModel widened to ChatModelConfig). Mechanical Placeholder-policy ripples applied across workers/backend/web (zero new behavior) + docs synced (data-model, api-spec, ARCHITECTURE-SPINE, TECHNICAL-DESIGN, epics.md Épico 7 appended, PRD scope note). Gate green: lint 0 / 685 unit+web / build clean (5 pkgs) / 110 integration (backend+bot+workers; 1 transient login-flow flake on first parallel run, green on isolated + full re-run) / 13 e2e chromium unchanged pass count. No new deps. Unblocks Story 7.2 (workers/indexer URL-extraction+fetch+AI-enrichment pipeline).
 # epic-7 flipped backlog → in-progress and 7-1 → ready-for-dev on story creation (bmad-create-story 2026-07-09).
 # Story 7.1 forks confirmed with Borja: Citation.link REQUIRED (clean-slate runbook extended to
@@ -195,7 +218,7 @@ development_status:
   # + grouping/chunking. Approved by Borja incl. destructive migration + full re-index.
   epic-7: in-progress
   7-1-shared-modelo-datos-contratos-config-enriquecimiento: done
-  7-2-workers-indexer-extraccion-urls-fetch-ssrf-generacion-ia: backlog
+  7-2-workers-indexer-extraccion-urls-fetch-ssrf-generacion-ia: review
   7-3-workers-sync-reindexacion-por-diff-de-links-y-purgado: backlog
   7-4-backend-proyeccion-search-documents-rag-citas-seed: backlog
   7-5-web-searchview-docsview-citas-title-description-link: backlog
