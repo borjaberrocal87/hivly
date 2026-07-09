@@ -1,6 +1,6 @@
 // Shared internal shapes for the Indexer pipeline. Kept separate from the pure
-// stages (events/grouping/chunking) and the orchestrator (indexBatch) so both
-// sides depend on the same definitions without a cycle.
+// stages (events/partition) and the orchestrator (indexBatch) so both sides
+// depend on the same definitions without a cycle.
 import type { MessageCreatedEvent } from '@hivly/shared/types/events';
 
 /** A raw entry as node-redis delivers it from XREADGROUP: the stream id plus the

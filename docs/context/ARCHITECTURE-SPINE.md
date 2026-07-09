@@ -76,7 +76,7 @@ graph TD
 - **Binds:** packages/backend (validación runtime), packages/web (tipos TypeScript)
 - **Prevents:** divergencia silenciosa entre shapes de request/response del frontend y backend
 - **Rule:** Todo shape de request o response de la API REST está definido como Zod schema en `packages/shared/src/schemas/`. El backend valida con `schema.parse()`; el frontend infiere tipos con `z.infer<typeof schema>`. Ningún servicio define shapes de API localmente.
-- **Nota (Epic 7, Story 7.1):** `SearchFragmentSchema`/`DocumentFragmentSchema` reemplazan `content` por `title`+`description`+`link`; `CitationSchema` gana `link` (requerido). `link` usa la misma convención "empty-or-URL" que `base_url` en `config/index.ts` (`z.string().refine(v => v === '' || /^https?:\/\//.test(v), …)`) — **nunca** `z.url()` estricto, porque hasta la Historia 7.2 los valores mecánicos/seeds usan `link: ''`.
+- **Nota (Epic 7, Stories 7.1–7.2):** `SearchFragmentSchema`/`DocumentFragmentSchema` reemplazan `content` por `title`+`description`+`link`; `CitationSchema` gana `link` (requerido). `link` usa la convención "empty-or-URL" centralizada en `schemas/linkRefine.ts` (`isEmptyOrHttpUrl`, parse-based vía `URL.canParse`) — `''` sigue válido para seeds/placeholders (7.4 actualiza el seed), un valor no vacío debe ser una URL http(s) bien formada. **Nunca** `z.string().url()` (deprecado) ni `z.url()` estricto (ambos rechazan `''`).
 
 ### AD-7 — nginx como punto de entrada HTTP único
 
