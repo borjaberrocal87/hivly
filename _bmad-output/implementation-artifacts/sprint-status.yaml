@@ -41,7 +41,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-09
+last_updated: 2026-07-09  # story 7-1 → done (bmad-code-review)
 # story 7-1 ready-for-dev → review (bmad-dev-story 2026-07-09): shared kernel pivoted to the resource-index contract (embeddings: content → title/description/link; migration 0003_bent_mandrill.sql generated+applied+verified locally after a full FK-safe wipe; search/documents/citation/sse contracts swapped; required enrichment config block added to HivlyConfigSchema + createChatModel widened to ChatModelConfig). Mechanical Placeholder-policy ripples applied across workers/backend/web (zero new behavior) + docs synced (data-model, api-spec, ARCHITECTURE-SPINE, TECHNICAL-DESIGN, epics.md Épico 7 appended, PRD scope note). Gate green: lint 0 / 685 unit+web / build clean (5 pkgs) / 110 integration (backend+bot+workers; 1 transient login-flow flake on first parallel run, green on isolated + full re-run) / 13 e2e chromium unchanged pass count. No new deps. Unblocks Story 7.2 (workers/indexer URL-extraction+fetch+AI-enrichment pipeline).
 # epic-7 flipped backlog → in-progress and 7-1 → ready-for-dev on story creation (bmad-create-story 2026-07-09).
 # Story 7.1 forks confirmed with Borja: Citation.link REQUIRED (clean-slate runbook extended to
@@ -194,7 +194,7 @@ development_status:
   # per URL enriched with AI title+description, stored with its link; drop `content`
   # + grouping/chunking. Approved by Borja incl. destructive migration + full re-index.
   epic-7: in-progress
-  7-1-shared-modelo-datos-contratos-config-enriquecimiento: review
+  7-1-shared-modelo-datos-contratos-config-enriquecimiento: done
   7-2-workers-indexer-extraccion-urls-fetch-ssrf-generacion-ia: backlog
   7-3-workers-sync-reindexacion-por-diff-de-links-y-purgado: backlog
   7-4-backend-proyeccion-search-documents-rag-citas-seed: backlog

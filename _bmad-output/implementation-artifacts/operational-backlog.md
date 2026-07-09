@@ -88,7 +88,11 @@
    (`user_read_status` before `embeddings`; `messages` before `conversations` — both have plain
    `no action` FKs, no cascade.)
 3. Apply the migration: `npx drizzle-kit migrate` (or let the compose `migrator` one-shot service
-   run it on the next `docker compose up`).
+   run it on the next `docker compose up`). **Step 2 MUST have run first — even on the `migrator`
+   path.** The migration is `ADD COLUMN … NOT NULL` with no default; against a non-empty `embeddings`
+   table it aborts, the one-shot `migrator` exits non-zero, and every app service
+   (`depends_on: migrator service_completed_successfully`) fails to start. On a fresh environment the
+   table is already empty; on any environment with prior data, truncate before letting `migrator` run.
 4. Verify: `docker exec -it <postgres-container> psql -U hivly -d hivly -c '\d embeddings'` — expect
    `title/description/link text NOT NULL`, no `content` column, indexes unchanged.
 5. Restart the app containers and let the Bot re-run its historical backfill — every message is

@@ -4,7 +4,7 @@ baseline_commit: fce991133234e731fd1572079f4ad84116782215
 
 # Story 7.1: shared — modelo de datos, contratos y config de enriquecimiento
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 <!-- Ultimate context engine analysis completed 2026-07-09 — comprehensive developer guide created
@@ -114,6 +114,17 @@ work — no URL extraction, no fetching, no LLM calls, no UI redesign.
   - [x] Retarget `SearchView.test.tsx`, `DocsView.test.tsx`, `ChatWidget.test.tsx`, `api/conversations.test.ts` fixtures/assertions.
 - [x] Task 7 — Docs (AC: 8) — data-model.md, api-spec.yml, ARCHITECTURE-SPINE.md, TECHNICAL-DESIGN.md, epics.md, PRD.md per AC-8 bullet list.
 - [x] Task 8 — Verification gate + evidence (AC: 9); update this story's Dev Agent Record; flip sprint-status `7-1-…` → `review` on completion; commit in slices (§Git intelligence) and open the PR.
+
+### Review Findings
+
+_Code review 2026-07-09 (bmad-code-review, 3 adversarial layers). Acceptance Auditor found ZERO AC/decision violations; all substantive findings concern the dormant `link` field and are forward-looking to 7.2._
+
+- [x] [Review][Defer] `link` empty-or-URL refine is a weak URL validator — the ratified D2 convention `v === '' || /^https?:\/\//.test(v)` is case-sensitive (rejects a valid `HTTP://…`) and prefix-only (accepts `https://` with no host, embedded whitespace/markup, or trailing garbage). Dormant in 7.1 (`link` is always `''`) but it is the shared contract 7.2 writes and 7.5 renders as an href. Compounding: `ragRetriever.drizzle.ts` maps rows through `SearchFragmentSchema.parse` per-row with no try/catch, so a single malformed `link` would abort the whole retrieval batch. [Sources: Edge #2, Edge #3] — deferred (decision, 2026-07-09): robust URL validation belongs to 7.2 where extraction/normalization lives; the D2 refine stays aligned with `base_url` and `link` is inert (`''`) in 7.1.
+- [x] [Review][Patch] Deploy runbook automated-migration path can skip the truncate [_bmad-output/implementation-artifacts/operational-backlog.md:~90] — step 3's "or let the compose `migrator` one-shot service run it on the next `docker compose up`" reads as an alternative to the manual sequence; run out of order it skips step 2's `TRUNCATE`, the `ADD COLUMN … NOT NULL` fails on a non-empty table, and every app service (`depends_on: migrator service_completed_successfully`) fails to start. [Source: Edge #1] — FIXED: added a bold caveat to runbook step 3 that step 2's truncate MUST run first even on the `migrator` path.
+- [x] [Review][Patch] Missing config reject-tests for validation branches this diff introduced [packages/shared/src/config/index.test.ts] — no negative case for `enrichment.llm.base_url` non-empty-invalid, `enrichment.fetch.allowed_schemes: []` (`.nonempty()`), or `enrichment.fetch.max_redirects: -1` (`.nonnegative()`); a future loosening of these rules would pass CI silently. [Source: Edge #6] — FIXED: added 3 reject-case tests; config suite now 36 passed (was 33).
+- [x] [Review][Defer] Schema/doc comments describe the post-7.2 `chunk_key`/`messageIds` state ahead of the code [packages/shared/src/db/schema.ts + docs/data-model.md, docs/context/TECHNICAL-DESIGN.md] — `chunk_key = "<messageId>:<urlIndex>"` and `messageIds` length-1 are documented now, but shipped worker code (`indexBatch.ts`) still writes grouped multi-message arrays with a chunk index. Sanctioned by AC-1 + the AD-13 note ("7.1 just documents it"); resolved when 7.2 lands. — deferred, forward-doc by design. [Source: Blind #2]
+
+**Dismissed as noise (6):** Blind #1 backend/bot boot failure (FALSE POSITIVE — all services use `env_file: - .env`, verified; the required secret reaches every container) · Blind #3 migration `NOT NULL`-without-default footgun (intentional/destructive-by-design, runbook-documented) · Edge #4 `ENRICHMENT_LLM_BASE_URL` per-service asymmetry (consistent with the pre-existing `EMBEDDINGS_BASE_URL` pattern; `.env.example` ships the line) · Edge #5 `prompt.ts` renders ` — <text> ()` under placeholders (spec-sanctioned "acceptable pre-7.2") · Auditor obs-1 Ripple-map under-lists 3 test files (all legit, in the File List) · Auditor obs-2 unit fixtures use non-empty `title` (test-only, harmless; runtime writes + e2e seed correctly use `''`).
 
 ## Dev Notes
 
