@@ -23,7 +23,22 @@ function requireString(val: unknown, name: string): asserts val is string {
 }
 
 /**
- * Build the RAG agent's chat model from `agent` config.
+ * The structural shape `createChatModel` actually needs — satisfied by both
+ * `HivlyConfig['agent']` and `HivlyConfig['enrichment']['llm']` (Epic 7), so the
+ * Story 7.2+ enrichment pipeline can reuse this factory without agent-only fields
+ * (`max_iterations`, `memory_window`) leaking into the type.
+ */
+export interface ChatModelConfig {
+  provider: 'anthropic' | 'openai' | 'custom';
+  model: string;
+  temperature: number;
+  base_url?: string;
+  api_key: string;
+}
+
+/**
+ * Build a chat model from an `agent`-shaped config (the RAG agent's `agent`
+ * block, or Epic 7's `enrichment.llm` block).
  *
  * - `anthropic` → {@link ChatAnthropic} (native Anthropic API).
  * - `openai` / `custom` → {@link ChatOpenAI}; for `custom`, `base_url` points the
@@ -32,7 +47,7 @@ function requireString(val: unknown, name: string): asserts val is string {
  * Returns the LangChain base abstraction so consumers depend on the interface,
  * not the concrete provider class.
  */
-export function createChatModel(agent: HivlyConfig['agent']): BaseChatModel {
+export function createChatModel(agent: ChatModelConfig): BaseChatModel {
   const { provider, api_key, model, temperature, base_url } = agent;
 
   switch (provider) {

@@ -113,6 +113,9 @@ services:
       # Embeddings (Indexer, Story 3.3). base_url only for "custom".
       EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY}
       EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
+      # Enrichment LLM (Indexer, Epic 7 — title/description generation, Story 7.2). base_url only for "custom".
+      ENRICHMENT_LLM_API_KEY: ${ENRICHMENT_LLM_API_KEY}
+      ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
     volumes:
       - ./Hivly.config.yml:/app/Hivly.config.yml:ro
     depends_on:
