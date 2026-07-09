@@ -31,6 +31,12 @@ const BORDER = 'rgb(32, 38, 47)'; // --border #20262F
 const BORDER_STRONG = 'rgb(42, 49, 61)'; // --border-strong #2A313D
 const LINE = 'rgb(24, 29, 37)'; // --line #181D25 (disabled send button bg)
 const AMBER = 'rgb(245, 166, 35)'; // #F5A623 (enabled send button bg)
+const TEXT_PRIMARY = 'rgb(230, 233, 239)'; // --text-primary #E6E9EF
+
+// The seeded conversation's one citation (CONVERSATION_CITATIONS[0] in seed.ts):
+// the chip shows this resource title and links to this href.
+const CITATION_TITLE = 'Cómo configurar los canales a indexar';
+const CITATION_LINK = 'https://example.com/e2e/configurar-canales-indexados';
 
 // Must match packages/backend/src/e2e/seed.ts (the seeded conversation the history
 // overlay lists and 5.4 loads). Title is DERIVED from the first user message.
@@ -199,6 +205,18 @@ test.describe('Story 5.4 — Chat messages + streaming', () => {
     const citation = page.getByTestId('chat-citation').first();
     await expect(citation).toContainText('#general');
     await expect(citation).toHaveCSS('border-color', BORDER);
+
+    // Story 7.6 (7.5-rendered, jsdom-unverifiable): the chip shows the resource
+    // title and links to the resource, not a placeholder discord.com/channels href.
+    await expect(citation).toHaveAttribute('href', CITATION_LINK);
+    const citationTitle = citation.getByText(CITATION_TITLE, { exact: true });
+    await expect(citationTitle).toHaveCSS('color', TEXT_PRIMARY);
+    await expect(citationTitle).toHaveCSS('text-overflow', 'ellipsis');
+    // overflow:hidden makes the ellipsis + max-width truncation actually engage;
+    // without it the ellipsis is inert, so a regression dropping it must fail here.
+    await expect(citationTitle).toHaveCSS('overflow-x', 'hidden');
+    await expect(citationTitle).toHaveCSS('max-width', '180px');
+
     await citation.hover();
     await expect(citation).toHaveCSS('border-color', 'rgb(88, 101, 242)'); // #5865F2
 
