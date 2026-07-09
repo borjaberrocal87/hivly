@@ -41,7 +41,8 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-09  # story 7-2 in-progress → review (bmad-dev-story)
+last_updated: 2026-07-09  # story 7-2 review → done (bmad-code-review): 3 layers (Blind/Edge/Auditor), acceptance clean (11 ACs + D1–D4). 8 patches applied+verified (lint/build/165 affected unit green): P1 HIGH — readCappedBody throw escaped fetchUrl's never-throws contract → poison message (wrapped→typed timeout/network_error); D1 MED — MAX_URLS_PER_MESSAGE=20 cap (grouping window was deleted, nothing replaced it); D2 MED — delimit untrusted page/message text in the LLM prompt; P2 MED — bound title(200)/description(1000) output; P3/P4/P5/P6 LOW/nit (abort rethrow in enrich, HTML hex+astral entities, spine link-refine note, types.ts grouping comment). 3 deferred (UTF-8 charset decoding, surrogate-split truncation, meta regex on full HTML). 2 dismissed as verified false positives (markdown-parens truncation, IPv4-mapped IPv6 SSRF). Patches UNCOMMITTED on feat/7-2-indexer-url-enrichment — commit+push to PR #46 + run integration before merge.
+# story 7-2 in-progress → review (bmad-dev-story)
 # story 7-2 ready-for-dev → review (bmad-dev-story 2026-07-09): Indexer rewritten as the resource
 # pipeline — extractUrls (Discord angle-bracket/markdown unwrap, trailing-punctuation+balanced-
 # paren stripping, URL.href normalization) → SSRF-guarded fetchUrl (ssrfGuard.ts: node:net
@@ -218,7 +219,7 @@ development_status:
   # + grouping/chunking. Approved by Borja incl. destructive migration + full re-index.
   epic-7: in-progress
   7-1-shared-modelo-datos-contratos-config-enriquecimiento: done
-  7-2-workers-indexer-extraccion-urls-fetch-ssrf-generacion-ia: review
+  7-2-workers-indexer-extraccion-urls-fetch-ssrf-generacion-ia: done
   7-3-workers-sync-reindexacion-por-diff-de-links-y-purgado: backlog
   7-4-backend-proyeccion-search-documents-rag-citas-seed: backlog
   7-5-web-searchview-docsview-citas-title-description-link: backlog

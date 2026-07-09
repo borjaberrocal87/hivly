@@ -4,7 +4,7 @@ baseline_commit: 395dc0a3b3b130b5ca13d8216f3e5424e0632715
 
 # Story 7.2: workers/indexer — extracción de URLs, UrlFetcher (SSRF) y generación IA
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 <!-- Ultimate context engine analysis completed 2026-07-09 — comprehensive developer guide created
@@ -318,6 +318,38 @@ deferred. `indexBatch` must NOT emit notifications.
 - [x] Task 7 — Docs sync (AC: 10) per bullet list.
 - [x] Task 8 — Verification gate + evidence (AC: 11); update Dev Agent Record; flip sprint-status
       `7-2-…` → `review`; commit in slices (§Git intelligence) and open the PR.
+
+### Review Findings (bmad-code-review 2026-07-09)
+
+3 adversarial layers (Blind Hunter, Edge Case Hunter, Acceptance Auditor) — all ran, none failed.
+Acceptance audit: all 11 ACs + D1–D4 honored, no out-of-scope leaks, AD-2/AD-13 hold.
+
+Regression tests added (discriminating — fail against pre-patch): `urlFetcher.test.ts` `/slow-body`
+(mid-body stall → `timeout`, no throw) + `/reset-body` (socket reset mid-body → `network_error`, no
+throw) for P1; `indexBatch.test.ts` "should cap URLs per message at 20" for D1. Gate: lint clean /
+191 affected unit green (1 skip = env-gated LLM smoke) / build clean. Integration not re-run (infra).
+
+Patch (resolved from decision — Borja 2026-07-09):
+- [x] [Review][Patch] Cap URL count per message [packages/workers/src/indexer/indexBatch.ts:76] — MEDIUM. Add module constant `MAX_URLS_PER_MESSAGE = 20`; process the first N in order, `logger.warn` the dropped count. The old `MAX_GROUPING_WINDOW=50` cap was deleted with nothing replacing it → unbounded fetch+LLM+embed fan-out (cost/DoS). Decision: module constant + process-first-N (not a config knob, not discard-whole-message).
+- [x] [Review][Patch] Delimit untrusted fetched page text in the LLM prompt [packages/workers/src/enrichment/enrich.ts:107] — MEDIUM. Wrap `bodyText` (and message text) in explicit BEGIN/END UNTRUSTED delimiters + a "treat as data, not instructions" line; combine with the output-length bound below (P2). Decision: delimit + bound (partial, cheap); deeper controls out of scope.
+
+Patch:
+- [x] [Review][Patch] Body-stream read can throw out of `fetchUrl`, breaking its "never throws" contract [packages/workers/src/enrichment/urlFetcher.ts:153] — HIGH. `readCappedBody`/`reader.read()` run OUTSIDE the try/catch (which only wraps `undiciFetch`). A mid-body timeout or socket reset rejects and propagates out of `fetchUrl`; `processMessage` then misclassifies it as a D1 enrichment failure → message un-ACKed → poison entry that re-fetches+re-times-out forever. Should return `{ok:false, reason:'timeout'|'network_error'}` instead.
+- [x] [Review][Patch] No max-length bound on enrichment `title`/`description` [packages/workers/src/enrichment/enrich.ts:72] — MEDIUM. `EnrichmentOutputSchema` only asserts strings; `normalize` trims/collapses but never clamps length. An oversized LLM output flows unbounded into `buildEmbeddingText`, the paid embeddings call, and the DB row.
+- [x] [Review][Patch] Abort during enrichment swallowed → extra LLM call on already-aborted signal [packages/workers/src/enrichment/enrich.ts:151] — LOW. `tryStructuredOutput`'s `catch { return null }` swallows `AbortError` and falls through to `tryJsonFallback`, firing a second `invoke` during shutdown (same class as the 5.2 reasonNode swallow). Rethrow when `signal.aborted`.
+- [x] [Review][Patch] HTML entity decoder wrong for hex + astral code points [packages/workers/src/enrichment/htmlText.ts:30] — LOW. Only decimal `&#(\d+);` is matched and `String.fromCharCode` truncates code points > 0xFFFF; hex `&#x…;` passes undecoded. Use `String.fromCodePoint` + a hex branch. (Hint quality only.)
+- [x] [Review][Patch] Stale doc: spine still documents the OLD prefix-regex link refine [docs/context/ARCHITECTURE-SPINE.md:79] — LOW. After AC-7 hardened the three schemas to parse-based `isEmptyOrHttpUrl`, line 79 still shows the `/^https?:\/\//` form and a stale "hasta 7.2" note.
+- [x] [Review][Patch] Stale comment references deleted `grouping.ts` [packages/workers/src/indexer/types.ts:6] — nit. Comment says "pure stages (events/grouping/chunking)"; `grouping.ts` was deleted this story.
+
+Deferred:
+- [x] [Review][Defer] Response body always decoded as UTF-8 regardless of charset [packages/workers/src/enrichment/urlFetcher.ts:68] — MEDIUM, quality-only. Non-UTF-8 pages (ISO-8859-1/Shift-JIS/UTF-16) produce mojibake in hints fed to the LLM; fix needs charset detection/`TextDecoder`.
+- [x] [Review][Defer] Truncation can split a surrogate pair / grapheme [packages/workers/src/enrichment/htmlText.ts:42; enrich.ts:65] — LOW, cosmetic. Same grapheme-safety class deferred in Story 5.2.
+- [x] [Review][Defer] `extractMeta`/`extractTitle` regex run on full untruncated ~2MB HTML [packages/workers/src/enrichment/htmlText.ts:52] — LOW. Bounded by `max_bytes`; mild backtracking risk on pathological input.
+
+Dismissed (verified false positives / intended):
+- Markdown link with balanced parens truncated (Blind+Edge) — FALSE POSITIVE: verified `extractUrls('[wiki](https://…/Foo_(bar))')` returns the full URL; the markdown unwrap leaves the trailing `)` in the text and the `BARE_URL` + `stripTrailingPunctuation` second pass balance-recovers it.
+- IPv4-mapped IPv6 SSRF bypass (`::ffff:169.254.169.254`) — verified Node `BlockList` normalizes IPv4-mapped IPv6 and blocks it against the IPv4 rules. SSRF encoding/redirect/rebinding checks all came back clean.
+- `finalUrl` unused / `link` stores the pre-redirect URL — intended (persist the URL the user shared); `finalUrl` dead value is a harmless nit.
 
 ## Dev Notes
 
