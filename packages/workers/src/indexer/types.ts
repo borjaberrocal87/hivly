@@ -41,17 +41,7 @@ export interface PartitionResult {
   /** Stream ids to leave PENDING (no XACK): no `discord_messages` row yet
    *  (XADD-before-COMMIT race) — retried on the next delivery. Informational. */
   pending: string[];
-  /** Entries whose row exists but is not yet indexed — proceed to group/embed. */
+  /** Entries whose row exists but is not yet indexed — proceed to the resource
+   *  pipeline (extract URLs → fetch → enrich → embed → persist). */
   toProcess: ParsedEntry[];
-}
-
-/** A by-channel group of messages to chunk + embed + upsert as one unit. */
-export interface MessageGroup {
-  channelId: string;
-  /** Message snowflakes in stream order; `messageIds[0]` seeds the chunk_key. */
-  messageIds: string[];
-  /** Stream entry ids for these messages — XACKed together on success. */
-  streamIds: string[];
-  /** Each message's content, in the same order as `messageIds`. */
-  contents: string[];
 }

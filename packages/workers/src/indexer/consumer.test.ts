@@ -4,6 +4,8 @@ import type { RedisClient } from '@hivly/shared/redis';
 import { STREAM_KEYS } from '@hivly/shared/types/events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { EnrichmentChatModel } from '../enrichment/enrich.js';
+import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import type { Logger } from '../logger.js';
 import { runIndexer } from './consumer.js';
 import { indexBatch } from './indexBatch.js';
@@ -16,6 +18,8 @@ vi.mock('./indexBatch.js', () => ({ indexBatch: vi.fn() }));
 const config = {} as unknown as HivlyConfig;
 const db = {} as unknown as Database;
 const embedder = {} as unknown as Embedder;
+const enrichModel = {} as unknown as EnrichmentChatModel;
+const guard = {} as unknown as GuardedDispatcher;
 
 function makeLogger(): Logger {
   return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -72,7 +76,7 @@ describe('runIndexer', () => {
     });
 
     await expect(
-      runIndexer({ redis, db, embedder, config, logger: makeLogger(), signal: controller.signal }),
+      runIndexer({ redis, db, embedder, config, logger: makeLogger(), enrichModel, guard, signal: controller.signal }),
     ).resolves.toBeUndefined();
   });
 
@@ -84,7 +88,7 @@ describe('runIndexer', () => {
     });
 
     await expect(
-      runIndexer({ redis, db, embedder, config, logger: makeLogger(), signal: controller.signal }),
+      runIndexer({ redis, db, embedder, config, logger: makeLogger(), enrichModel, guard, signal: controller.signal }),
     ).rejects.toThrow('NOPERM');
   });
 
@@ -109,7 +113,7 @@ describe('runIndexer', () => {
       ],
     });
 
-    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), signal: controller.signal });
+    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), enrichModel, guard, signal: controller.signal });
 
     expect(seenReplayIds).toEqual(['0', '1-0']); // advanced past the first batch
     expect(acked).toEqual(['1-0']);
@@ -133,7 +137,7 @@ describe('runIndexer', () => {
       ],
     });
 
-    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), signal: controller.signal });
+    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), enrichModel, guard, signal: controller.signal });
 
     expect(liveCalls).toBe(2);
     expect(indexBatch).not.toHaveBeenCalled();
@@ -153,7 +157,7 @@ describe('runIndexer', () => {
       ],
     });
 
-    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), signal: controller.signal });
+    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), enrichModel, guard, signal: controller.signal });
 
     expect(acked).toEqual(['a', 'b']); // 'c' was not confirmed by indexBatch
   });
@@ -163,7 +167,7 @@ describe('runIndexer', () => {
     controller.abort();
     const { redis } = fakeRedis({ reads: [] });
 
-    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), signal: controller.signal });
+    await runIndexer({ redis, db, embedder, config, logger: makeLogger(), enrichModel, guard, signal: controller.signal });
 
     expect(redis.xReadGroup).not.toHaveBeenCalled();
   });

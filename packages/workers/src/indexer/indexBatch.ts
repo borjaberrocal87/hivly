@@ -1,22 +1,29 @@
-// Batch orchestrator (AC-2…AC-5): turns one XREADGROUP batch into embeddings rows
-// and the set of stream ids that are safe to XACK. Pure stages (parse, partition,
-// group, chunk) are composed here around the two I/O touchpoints — the embeddings
-// call and one Drizzle transaction per group.
+// Batch orchestrator (FR5, AC-6): turns one XREADGROUP batch into resource rows
+// and the set of stream ids that are safe to XACK. The resource pipeline per
+// message is: extract URLs → discard if none → per URL: SSRF-guarded fetch →
+// AI enrich (message-text-only fallback on fetch failure) → embed all of the
+// message's `title\n\ndescription` texts in one call → persist + stamp in one
+// transaction.
 //
-// AD-13 made concrete: an id is returned for XACK only after its row is stamped
-// `indexed_at` inside a COMMITted tx (RETURNING-gated). Any failure — bad embed
-// call, dimension mismatch, DB error — logs and leaves that group's entries
-// PENDING (no ack), and later groups still run. A poison entry never crashes.
+// AD-13 made concrete: an id is returned for XACK only after its row(s) are
+// stamped `indexed_at` inside a COMMITted tx (RETURNING-gated) — or, for a
+// no-URL/all-blocked message, after the SAME stamp with zero rows (D2/discard).
+// An enrichment or embedding hard failure for the message leaves it un-ACKed
+// entirely (D1) — no partial persistence; later messages still run.
 import type { HivlyConfig } from '@hivly/shared';
 import { discordMessages, embeddings, inArray, sql } from '@hivly/shared/db';
 import type { Database } from '@hivly/shared/db';
 import { assertEmbeddingDimensions } from '@hivly/shared/providers';
 
+import { buildEmbeddingText, enrich, type EnrichmentChatModel } from '../enrichment/enrich.js';
+import { extractPageHints } from '../enrichment/htmlText.js';
+import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
+import { fetchUrl } from '../enrichment/urlFetcher.js';
+import { extractUrls } from '../enrichment/extractUrls.js';
 import type { Logger } from '../logger.js';
-import { chunkContents } from './chunking.js';
 import { parseCreatedEvent } from './events.js';
-import { groupByChannel, partitionByIndexState } from './grouping.js';
-import type { Embedder, IndexStateRow, MessageGroup, ParsedEntry, RawStreamEntry } from './types.js';
+import { partitionByIndexState } from './partition.js';
+import type { Embedder, IndexStateRow, ParsedEntry, RawStreamEntry } from './types.js';
 
 export interface IndexBatchDeps {
   entries: RawStreamEntry[];
@@ -24,25 +31,136 @@ export interface IndexBatchDeps {
   embedder: Embedder;
   config: HivlyConfig;
   logger: Logger;
+  /** The enrichment chat model — built once at boot, injected (AC-6, mirrors
+   *  the `embedder` injection pattern; never constructed here). */
+  enrichModel: EnrichmentChatModel;
+  /** The SSRF-guarded dispatcher — built once at boot, injected (AC-2/AC-6). */
+  guard: GuardedDispatcher;
+  /** Aborted on SIGTERM/SIGINT — checked between messages/URLs so a shutdown
+   *  never lets a partially-processed message get falsely stamped complete. */
+  signal: AbortSignal;
 }
 
 export interface IndexBatchResult {
   /** Stream ids safe to XACK: malformed entries, already-indexed entries, and
-   *  entries whose row was stamped `indexed_at` in a committed tx this pass. */
+   *  entries whose row(s) were stamped `indexed_at` in a committed tx this pass. */
   ackIds: string[];
+}
+
+interface ResourceRow {
+  urlIndex: number;
+  title: string;
+  description: string;
+  link: string;
+}
+
+type MessageOutcome = { kind: 'discard' } | { kind: 'rows'; rows: ResourceRow[] };
+
+/**
+ * Process one message's content into either a discard (no URLs / all blocked)
+ * or the set of resource rows to persist. Throws on an enrichment hard failure
+ * for ANY of the message's URLs — the whole message is a processing failure
+ * (D1); the caller leaves it entirely un-ACKed. `fetchUrl`/`enrich` never throw
+ * on their own account (typed outcomes / {@link EnrichmentError}), so a throw
+ * here always means enrichment failed.
+ */
+async function processMessage(
+  content: string,
+  deps: Pick<IndexBatchDeps, 'config' | 'enrichModel' | 'guard' | 'signal'>,
+): Promise<MessageOutcome> {
+  const { config, enrichModel, guard, signal } = deps;
+  const urls = extractUrls(content, config.enrichment.fetch.allowed_schemes);
+  if (urls.length === 0) return { kind: 'discard' };
+
+  const rows: ResourceRow[] = [];
+  for (let urlIndex = 0; urlIndex < urls.length; urlIndex++) {
+    if (signal.aborted) {
+      throw new Error('aborted while processing message URLs — leaving entry un-ACKed for replay');
+    }
+
+    const url = urls[urlIndex];
+    const outcome = await fetchUrl(url, config.enrichment.fetch, guard, signal);
+
+    if (!outcome.ok && (outcome.reason === 'ssrf_blocked' || outcome.reason === 'scheme_disallowed')) {
+      continue; // D2: skip this URL entirely — no row, not a failure.
+    }
+
+    const pageHints = outcome.ok ? extractPageHints(outcome.body, outcome.contentType) : null;
+    const result = await enrich(
+      enrichModel,
+      { messageText: content, pageHints, language: config.enrichment.language },
+      signal,
+    );
+
+    rows.push({ urlIndex, title: result.title, description: result.description, link: url });
+  }
+
+  if (rows.length === 0) return { kind: 'discard' }; // D2's all-blocked case converges here.
+  return { kind: 'rows', rows };
+}
+
+/**
+ * One tx per message: UPSERT every resource row by `chunk_key`, then stamp
+ * `indexed_at`. `rows`/`vectors` may be empty (the discard path) — the stamp
+ * still gates on the SAME RETURNING check. Returns whether the stamp actually
+ * touched the row (AD-13, no ack if it vanished between the dedup SELECT and
+ * the stamp).
+ */
+async function persistMessage(
+  db: Database,
+  messageId: string,
+  channelId: string,
+  rows: ResourceRow[],
+  vectors: number[][],
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      await tx
+        .insert(embeddings)
+        .values({
+          chunkKey: `${messageId}:${row.urlIndex}`,
+          title: row.title,
+          description: row.description,
+          link: row.link,
+          embedding: vectors[i],
+          channelId,
+          messageIds: [messageId],
+        })
+        .onConflictDoUpdate({
+          target: embeddings.chunkKey,
+          set: {
+            title: sql`excluded.title`,
+            description: sql`excluded.description`,
+            link: sql`excluded.link`,
+            embedding: sql`excluded.embedding`,
+            channelId: sql`excluded.channel_id`,
+            messageIds: sql`excluded.message_ids`,
+          },
+        });
+    }
+
+    const stamped = await tx
+      .update(discordMessages)
+      .set({ indexedAt: sql`now()` })
+      .where(inArray(discordMessages.id, [messageId]))
+      .returning({ id: discordMessages.id });
+
+    return stamped.length > 0;
+  });
 }
 
 /**
  * Process one batch of raw stream entries. Never throws for a data/processing
- * failure — a failed group is logged and its entries are simply omitted from
+ * failure — a failed message is logged and its entries are simply omitted from
  * `ackIds` so Redis redelivers them.
  */
 export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult> {
-  const { entries, db, embedder, config, logger } = deps;
+  const { entries, db, embedder, config, logger, enrichModel, guard, signal } = deps;
   const ackIds: string[] = [];
 
   // 1. Parse. Malformed / foreign-typed entries can never succeed — XACK them so
-  //    they leave the PEL instead of being redelivered forever (AC-2). A tombstoned
+  //    they leave the PEL instead of being redelivered forever. A tombstoned
   //    (XDEL'd) PEL entry can be redelivered with `message: null` — treat it the
   //    same as any other unprocessable entry instead of throwing.
   const parsed: ParsedEntry[] = [];
@@ -61,7 +179,7 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
 
   if (parsed.length === 0) return { ackIds };
 
-  // 2. Dedup state — ONE query over the batch's distinct message ids (AC-2).
+  // 2. Dedup state — ONE query over the batch's distinct message ids.
   const ids = [...new Set(parsed.map((e) => e.event.messageId))];
   const rows: IndexStateRow[] = await db
     .select({ id: discordMessages.id, indexedAt: discordMessages.indexedAt })
@@ -70,7 +188,7 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
 
   const { ackNow, pending, toProcess } = partitionByIndexState(parsed, rows);
   // Already-indexed → XACK + skip; row-missing → leave PENDING (no ack), retried
-  // once the bot's COMMIT lands (reconciliation note 5).
+  // once the bot's COMMIT lands.
   ackIds.push(...ackNow);
   if (pending.length > 0) {
     logger.debug('entries pending — no discord_messages row yet, leaving un-ACKed', {
@@ -79,12 +197,10 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
   }
 
   // A producer duplicate can put the SAME messageId in `toProcess` twice (up to 3x,
-  // per persistMessage's documented COMMIT-race amplification). If two occurrences
-  // landed in different grouping windows, both groups would derive the identical
-  // `chunk_key` from `messageIds[0]` and the second upsert would silently overwrite
-  // the first's content. Dedup by messageId BEFORE grouping — keep the first
-  // occurrence for content/grouping, and remember every duplicate's streamId so
-  // they all get acked once that messageId's group is confirmed persisted.
+  // per persistMessage's documented COMMIT-race amplification). Dedup by messageId
+  // BEFORE processing — keep the first occurrence for content, and remember every
+  // duplicate's streamId so they all get acked once that messageId is confirmed
+  // persisted.
   const seenMessageIds = new Set<string>();
   const dedupedToProcess: ParsedEntry[] = [];
   const extraStreamIdsByMessageId = new Map<string, string[]>();
@@ -100,120 +216,49 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
     dedupedToProcess.push(parsedEntry);
   }
 
-  // 3. Group by channel, then chunk → embed → guard → upsert, one group at a time.
-  const groups = groupByChannel(dedupedToProcess, config.knowledge.grouping_window);
   const dimensions = config.embeddings.dimensions;
-  const chunkOptions = {
-    chunkSize: config.knowledge.chunk_size,
-    chunkOverlap: config.knowledge.chunk_overlap,
-  };
 
-  for (const group of groups) {
-    // Tracks which stage failed so the error log below distinguishes an embedder
-    // outage from a chunking exception from a DB/transaction failure, instead of
-    // collapsing every cause into one generic message.
-    let stage: 'chunk' | 'embed' | 'persist' = 'chunk';
+  // 3. Resource pipeline, one message at a time — never grouped/chunked (FR5).
+  for (const parsedEntry of dedupedToProcess) {
+    if (signal.aborted) {
+      logger.debug('shutdown signal observed — bailing the rest of the batch, entries stay pending');
+      break;
+    }
+
+    const { messageId, channelId, content } = parsedEntry.event;
+    const extraStreamIds = extraStreamIdsByMessageId.get(messageId) ?? [];
+
     try {
-      const chunks = await chunkContents(group.contents, chunkOptions);
-      // Non-blank content always yields ≥1 chunk; the empty case is defensive so a
-      // valid-but-unchunkable group still gets stamped+acked instead of looping.
-      stage = 'embed';
-      const vectors = chunks.length > 0 ? await embedder.embedDocuments(chunks) : [];
+      const outcome = await processMessage(content, { config, enrichModel, guard, signal });
 
-      // The embedder is a third-party boundary — it may return fewer (or more)
-      // vectors than chunks requested. Treat a count mismatch as an embed failure
-      // rather than let `persistGroup` index past the shorter array.
-      if (vectors.length !== chunks.length) {
-        throw new Error(
-          `embedder returned ${vectors.length} vectors for ${chunks.length} chunks`,
-        );
-      }
-
-      // AC-3: every returned vector must match the configured width or the group
-      // is NOT persisted and its entries stay pending (no ack) for redelivery.
-      try {
+      let stamped: boolean;
+      if (outcome.kind === 'discard') {
+        stamped = await persistMessage(db, messageId, channelId, [], []);
+      } else {
+        const texts = outcome.rows.map((row) => buildEmbeddingText(row.title, row.description));
+        const vectors = await embedder.embedDocuments(texts);
+        if (vectors.length !== texts.length) {
+          throw new Error(`embedder returned ${vectors.length} vectors for ${texts.length} texts`);
+        }
         for (const vector of vectors) assertEmbeddingDimensions(vector, dimensions);
-      } catch {
-        logger.error('embedding dimension mismatch — group not persisted, entries stay pending', {
-          channelId: group.channelId,
-          expected: dimensions,
-          actual: vectors.map((v) => v?.length ?? null),
-        });
-        continue; // no ack ids for this group
+
+        stamped = await persistMessage(db, messageId, channelId, outcome.rows, vectors);
       }
 
-      stage = 'persist';
-      const stamped = await persistGroup(db, group, chunks, vectors);
-      // AC-4/AC-5: only ids whose row came back from the stamp RETURNING may be
-      // acked; a message whose row is still missing stays pending. Any duplicate
-      // stream entries for the same messageId (deduped above) ride along.
-      for (let i = 0; i < group.messageIds.length; i++) {
-        if (!stamped.has(group.messageIds[i])) continue;
-        ackIds.push(group.streamIds[i]);
-        const extras = extraStreamIdsByMessageId.get(group.messageIds[i]);
-        if (extras) ackIds.push(...extras);
+      if (stamped) {
+        ackIds.push(parsedEntry.streamId, ...extraStreamIds);
+      } else {
+        logger.debug('message row vanished before the stamp — leaving un-ACKed', { messageId });
       }
     } catch (err) {
-      logger.error(`failed to index group at stage=${stage} — entries stay pending`, {
-        channelId: group.channelId,
-        stage,
+      logger.error('failed to index message — entry stays pending', {
+        messageId,
+        channelId,
         reason: err instanceof Error ? err.message : String(err),
       });
-      // No ack ids for this group; later groups still run (AC-5).
+      // No ack ids for this message; later messages still run.
     }
   }
 
   return { ackIds };
-}
-
-/**
- * One tx per group (AC-4): UPSERT every chunk by `chunk_key`, then stamp
- * `indexed_at` on the group's rows. Returns the set of message ids the stamp
- * actually touched — only these may be acked (RETURNING-gated, AD-13).
- */
-async function persistGroup(
-  db: Database,
-  group: MessageGroup,
-  chunks: string[],
-  vectors: number[][],
-): Promise<Set<string>> {
-  return db.transaction(async (tx) => {
-    for (let i = 0; i < chunks.length; i++) {
-      await tx
-        .insert(embeddings)
-        .values({
-          // Message snowflakes are globally unique, so `<firstId>:<chunkIndex>`
-          // is a stable, channel-implicit key — redelivery converges here.
-          chunkKey: `${group.messageIds[0]}:${i}`,
-          // Placeholder policy (Epic 7, Story 7.1): title/link are AI-generated /
-          // extracted in Story 7.2 — `description` carries the old `content` text
-          // as its semantic successor until then.
-          title: '',
-          description: chunks[i],
-          link: '',
-          embedding: vectors[i],
-          channelId: group.channelId,
-          messageIds: group.messageIds,
-        })
-        .onConflictDoUpdate({
-          target: embeddings.chunkKey,
-          set: {
-            title: sql`excluded.title`,
-            description: sql`excluded.description`,
-            link: sql`excluded.link`,
-            embedding: sql`excluded.embedding`,
-            channelId: sql`excluded.channel_id`,
-            messageIds: sql`excluded.message_ids`,
-          },
-        });
-    }
-
-    const stamped = await tx
-      .update(discordMessages)
-      .set({ indexedAt: sql`now()` })
-      .where(inArray(discordMessages.id, group.messageIds))
-      .returning({ id: discordMessages.id });
-
-    return new Set(stamped.map((r) => r.id));
-  });
 }
