@@ -41,7 +41,13 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-09  # story 7-5 review → done (bmad-code-review): 3 layers @ Opus (Blind/Edge/Auditor),
+last_updated: 2026-07-09  # story 7-6 review → done (bmad-code-review): 3 adversarial layers @ Opus (Blind/Edge/Auditor). Edge Case Hunter cross-verified every new assert against the real 7.5 components/CSS/seed; Auditor 0 AC violations, 16/16 counts, ordering invariants hold. 2 patches applied (P1: added overflow-x/overflow-y hidden to the citation title + docs title + description-clamp asserts — closed a discrimination gap where ellipsis/clamp could pass green with overflow dropped; P2: ratified the AC2/D2 clamp-assertion substitution in the Change Log). 11 dismissed as verified false positives / spec-mandated (Unicode NFC/NFD flake, ordering comment-only w/ workers:1 pinned, has:-multi-match links unique per embedding, getAttribute-null, search-no-submit=4.3 pattern, card p/h3 single-match, 15.5px inline not rem, max-width 180px=D4-mandated, popup-fires-before-abort verified, discord regex=unchanged coexistence smoke). Gate: eslint 0 / web typecheck clean / 16 e2e chromium green (search 3 / docs 4 / chat 7 / interactions 2). Integration skipped (tests-only, no shared/backend/seed change). Epic 7 feature-complete — only the retro remains. Patches UNCOMMITTED on feat/7-6-e2e-visual-new-fields.
+# (prior) story 7-6 created (bmad-create-story) → ready-for-dev. FINAL Epic 7 story: tests-only,
+# extend Playwright visual harness to the 7.5-rendered resource fields (h3 title, .kh-resource-link hover,
+# doc-row-description clamp, citation title+href) 7.5 deferred. 4 forks w/ Borja: F1 extend 3 existing specs
+# (chat folds into AC6 history-load test); F2 full coverage w/ exact seed hrefs; F3 add MUTATING bubbling
+# mark-read test (popup handled, host route-blocked, ordered before terminal mark-all); no prod/seed change.
+# ---- prior: story 7-5 review → done (bmad-code-review): 3 layers @ Opus (Blind/Edge/Auditor),
 # all 8 ACs satisfied, 0 violations. 1 patch applied (title tightened .min(1)→.trim().min(1) across
 # citation/search/documents + 4 whitespace-reject tests; re-gate lint 0 / 813 unit+web / build clean).
 # 1 decision deferred (F2 mark-read misses middle-click/context-menu open-in-new-tab — accepted F2 limit).
@@ -314,7 +320,7 @@ development_status:
   7-3-workers-sync-reindexacion-por-diff-de-links-y-purgado: done
   7-4-backend-proyeccion-search-documents-rag-citas-seed: done
   7-5-web-searchview-docsview-citas-title-description-link: done
-  7-6-e2e-extender-harness-visual-campos-nuevos: backlog
+  7-6-e2e-extender-harness-visual-campos-nuevos: done
   epic-7-retrospective: optional
 
   # ── Operational backlog (post-roadmap) — no epic; see operational-backlog.md ─
