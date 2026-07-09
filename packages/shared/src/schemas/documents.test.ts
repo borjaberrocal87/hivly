@@ -130,6 +130,26 @@ describe('DocumentFragmentSchema', () => {
     expect(DocumentFragmentSchema.safeParse({ ...valid, link: 'not-a-url' }).success).toBe(false);
   });
 
+  it('should reject a link with embedded whitespace', () => {
+    expect(
+      DocumentFragmentSchema.safeParse({ ...valid, link: 'https://example.com/a b' }).success,
+    ).toBe(false);
+  });
+
+  it('should reject a host-less https:// link', () => {
+    expect(DocumentFragmentSchema.safeParse({ ...valid, link: 'https://' }).success).toBe(false);
+  });
+
+  it('should reject a non-http(s) scheme link', () => {
+    expect(DocumentFragmentSchema.safeParse({ ...valid, link: 'ftp://x' }).success).toBe(false);
+  });
+
+  it('should accept an uppercase-scheme link', () => {
+    expect(
+      DocumentFragmentSchema.safeParse({ ...valid, link: 'HTTPS://example.com/doc' }).success,
+    ).toBe(true);
+  });
+
   it('should reject a fragment whose id is not a uuid', () => {
     expect(DocumentFragmentSchema.safeParse({ ...valid, id: 'nope' }).success).toBe(false);
   });
