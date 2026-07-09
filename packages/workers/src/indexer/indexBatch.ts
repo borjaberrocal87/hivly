@@ -25,6 +25,12 @@ import { parseCreatedEvent } from './events.js';
 import { partitionByIndexState } from './partition.js';
 import type { Embedder, IndexStateRow, ParsedEntry, RawStreamEntry } from './types.js';
 
+/** Per-message cap on the URLs actually fetched+enriched. Bounds the paid
+ *  fetch/LLM/embed fan-out one crafted message can trigger (the old
+ *  `MAX_GROUPING_WINDOW=50` bound was demolished with the grouping stage). URLs
+ *  beyond the cap are dropped (first-N in extraction order) and logged. */
+const MAX_URLS_PER_MESSAGE = 20;
+
 export interface IndexBatchDeps {
   entries: RawStreamEntry[];
   db: Database;
@@ -66,11 +72,20 @@ type MessageOutcome = { kind: 'discard' } | { kind: 'rows'; rows: ResourceRow[] 
  */
 async function processMessage(
   content: string,
-  deps: Pick<IndexBatchDeps, 'config' | 'enrichModel' | 'guard' | 'signal'>,
+  deps: Pick<IndexBatchDeps, 'config' | 'enrichModel' | 'guard' | 'signal' | 'logger'>,
 ): Promise<MessageOutcome> {
-  const { config, enrichModel, guard, signal } = deps;
-  const urls = extractUrls(content, config.enrichment.fetch.allowed_schemes);
-  if (urls.length === 0) return { kind: 'discard' };
+  const { config, enrichModel, guard, signal, logger } = deps;
+  const extracted = extractUrls(content, config.enrichment.fetch.allowed_schemes);
+  if (extracted.length === 0) return { kind: 'discard' };
+
+  const urls = extracted.slice(0, MAX_URLS_PER_MESSAGE);
+  if (extracted.length > urls.length) {
+    logger.warn('message exceeds the per-message URL cap — indexing the first N, dropping the rest', {
+      extracted: extracted.length,
+      cap: MAX_URLS_PER_MESSAGE,
+      dropped: extracted.length - urls.length,
+    });
+  }
 
   const rows: ResourceRow[] = [];
   for (let urlIndex = 0; urlIndex < urls.length; urlIndex++) {
@@ -229,7 +244,7 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
     const extraStreamIds = extraStreamIdsByMessageId.get(messageId) ?? [];
 
     try {
-      const outcome = await processMessage(content, { config, enrichModel, guard, signal });
+      const outcome = await processMessage(content, { config, enrichModel, guard, signal, logger });
 
       let stamped: boolean;
       if (outcome.kind === 'discard') {

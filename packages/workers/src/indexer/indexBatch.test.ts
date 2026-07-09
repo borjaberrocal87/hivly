@@ -283,6 +283,36 @@ describe('indexBatch', () => {
     expect(inserted[0].chunkKey).toBe('m1:0');
   });
 
+  it('should cap URLs per message at 20, processing the first N and warning about the rest', async () => {
+    const logger = makeLogger();
+    const { db, inserted } = makeFakeDb([{ id: 'm1', indexedAt: null }]);
+
+    // 25 distinct URLs — 5 over the MAX_URLS_PER_MESSAGE cap.
+    const urls = Array.from({ length: 25 }, (_, i) => `https://ex.com/${i}`);
+
+    const { ackIds } = await indexBatch({
+      entries: [raw('s1', { content: urls.join(' ') })],
+      db,
+      embedder,
+      config,
+      logger,
+      enrichModel,
+      guard,
+      signal: neverAbortedSignal(),
+    });
+
+    expect(ackIds).toEqual(['s1']);
+    expect(inserted).toHaveLength(20);
+    expect(fetchUrl).toHaveBeenCalledTimes(20); // only the first 20 fetched
+    expect(inserted.map((r) => r.chunkKey).sort()).toEqual(
+      Array.from({ length: 20 }, (_, i) => `m1:${i}`).sort(),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('URL cap'),
+      expect.objectContaining({ extracted: 25, cap: 20, dropped: 5 }),
+    );
+  });
+
   it('should persist a text-only fallback row when the fetch fails for a non-SSRF reason', async () => {
     vi.mocked(fetchUrl).mockResolvedValue({ ok: false, reason: 'timeout' });
     const logger = makeLogger();
