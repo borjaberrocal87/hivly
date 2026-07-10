@@ -171,6 +171,24 @@ describe('StatsResponseSchema', () => {
     ).toBe(false);
   });
 
+  it('should reject when the 4 kpis are in the wrong order', () => {
+    expect(
+      StatsResponseSchema.safeParse({
+        ...validResponse,
+        kpis: [kpi('channels'), kpi('resources'), kpi('authors'), kpi('queries')],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('should reject when a kpi key is duplicated (breaking the fixed order)', () => {
+    expect(
+      StatsResponseSchema.safeParse({
+        ...validResponse,
+        kpis: [kpi('resources'), kpi('resources'), kpi('authors'), kpi('queries')],
+      }).success,
+    ).toBe(false);
+  });
+
   it('should reject when activity has fewer than 14 entries', () => {
     expect(
       StatsResponseSchema.safeParse({ ...validResponse, activity: validResponse.activity.slice(0, 13) })
