@@ -54,13 +54,18 @@ describe('statsService.getStats', () => {
     expect(statsRepo.getActivity).not.toHaveBeenCalled();
     expect(statsRepo.getChannelCounts).not.toHaveBeenCalled();
     expect(statsRepo.getCoverageReadCount).not.toHaveBeenCalled();
-    expect(statsRepo.countUserAgentQueries).toHaveBeenCalledWith('user-1');
+    // Windowed to 30 days before the injected `now` (UTC), computed service-side so the
+    // whole response is single-clock (RP4 — proves the 30-day cutoff, not Postgres now()).
+    expect(statsRepo.countUserAgentQueries).toHaveBeenCalledWith(
+      'user-1',
+      '2026-06-10T12:00:00.000Z',
+    );
 
     expect(result.kpis).toEqual([
       { key: 'resources', label: 'Recursos indexados', value: 0, sub: '+0 esta semana' },
       { key: 'channels', label: 'Canales', value: 0, sub: 'de 0 accesibles' },
       { key: 'authors', label: 'Autores', value: 0, sub: 'en tus canales' },
-      { key: 'queries', label: 'Tus consultas al agente', value: 5, sub: 'en total' },
+      { key: 'queries', label: 'Tus consultas al agente', value: 5, sub: 'últimos 30 días' },
     ]);
     expect(result.activity).toEqual(WINDOW_DAYS.map((date) => ({ date, count: 0 })));
     expect(result.channels).toEqual([]);
@@ -109,6 +114,21 @@ describe('statsService.getStats', () => {
     expect(result.coverage).toEqual({ readCount: 1, totalCount: 3, readPct: 33 });
   });
 
+  it('should bound readCount by totalCount when readCount exceeds it (non-transactional race)', async () => {
+    // resources (totalCount) and readCount come from two separate reads; a soft-delete
+    // landing between them can momentarily make readCount > totalCount. The shipped pair
+    // must stay self-consistent (no "5 of 4 read") and readPct within [0,100].
+    const statsRepo = fakeRepo({
+      getScopedKpiCounts: vi.fn(async () => ({ ...ZERO_KPIS, resources: 4 })),
+      getCoverageReadCount: vi.fn(async () => 5),
+    });
+    const service = createStatsService({ statsRepo });
+
+    const result = await service.getStats('user-1', ['chan-1'], NOW);
+
+    expect(result.coverage).toEqual({ readCount: 4, totalCount: 4, readPct: 100 });
+  });
+
   it('should assemble the KPI array in the fixed order with the ratified labels/subs (D3)', async () => {
     const statsRepo = fakeRepo({
       getScopedKpiCounts: vi.fn(async () => ({
@@ -127,7 +147,7 @@ describe('statsService.getStats', () => {
       { key: 'resources', label: 'Recursos indexados', value: 10, sub: '+4 esta semana' },
       { key: 'channels', label: 'Canales', value: 2, sub: 'de 2 accesibles' },
       { key: 'authors', label: 'Autores', value: 6, sub: 'en tus canales' },
-      { key: 'queries', label: 'Tus consultas al agente', value: 7, sub: 'en total' },
+      { key: 'queries', label: 'Tus consultas al agente', value: 7, sub: 'últimos 30 días' },
     ]);
   });
 

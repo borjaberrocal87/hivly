@@ -10,6 +10,7 @@ import type { StatsRepository } from '../../domain/repositories/statsRepository.
 
 const ACTIVITY_WINDOW_DAYS = 14;
 const WEEKLY_DELTA_DAYS = 7;
+const QUERIES_WINDOW_DAYS = 30;
 
 function utcDateString(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -50,24 +51,37 @@ export function createStatsService(deps: { statsRepo: StatsRepository }): StatsS
       const windowDays = buildWindowDays(now);
       const fromDate = `${windowDays[0]}T00:00:00.000Z`;
       const weekStart = new Date(now.getTime() - WEEKLY_DELTA_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      // 30-day `queries` window, computed here so the whole response is anchored to
+      // the same `now` as the other windows (not Postgres `now()`) — deterministic.
+      const queriesFrom = new Date(
+        now.getTime() - QUERIES_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+      ).toISOString();
 
-      const scoped = allowedChannelIds.length === 0;
+      // `true` when the caller has NO accessible channels (deny-all) — short-circuits
+      // every channel-scoped read (D6). Named for what it is, not the inverse.
+      const emptyScope = allowedChannelIds.length === 0;
 
       const [kpiCounts, activityRows, channels, readCount, queries] = await Promise.all([
-        scoped
+        emptyScope
           ? Promise.resolve({ resources: 0, resourcesThisWeek: 0, channels: 0, authors: 0 })
           : statsRepo.getScopedKpiCounts(allowedChannelIds, weekStart),
-        scoped ? Promise.resolve([]) : statsRepo.getActivity(allowedChannelIds, fromDate),
-        scoped ? Promise.resolve([]) : statsRepo.getChannelCounts(allowedChannelIds),
-        scoped ? Promise.resolve(0) : statsRepo.getCoverageReadCount(userId, allowedChannelIds),
-        statsRepo.countUserAgentQueries(userId), // D6: always runs, no channel scope
+        emptyScope ? Promise.resolve([]) : statsRepo.getActivity(allowedChannelIds, fromDate),
+        emptyScope ? Promise.resolve([]) : statsRepo.getChannelCounts(allowedChannelIds),
+        emptyScope ? Promise.resolve(0) : statsRepo.getCoverageReadCount(userId, allowedChannelIds),
+        statsRepo.countUserAgentQueries(userId, queriesFrom), // D6: always runs, no channel scope
       ]);
 
       const countByDay = new Map(activityRows.map((row) => [row.day, row.count]));
       const activity = windowDays.map((date) => ({ date, count: countByDay.get(date) ?? 0 }));
 
       const totalCount = kpiCounts.resources;
-      const readPct = totalCount === 0 ? 0 : Math.round((readCount / totalCount) * 100);
+      // readCount and totalCount come from two separate non-transactional reads, so a
+      // soft-delete landing between them can momentarily make readCount > totalCount.
+      // You cannot have read more resources than exist: bound readCount by totalCount so
+      // the shipped pair is self-consistent (no "5 of 4 read") AND readPct stays in
+      // [0,100] without a separate clamp (StatsCoverageSchema.max(100) would else 500).
+      const safeReadCount = Math.min(readCount, totalCount);
+      const readPct = totalCount === 0 ? 0 : Math.round((safeReadCount / totalCount) * 100);
 
       const kpis = [
         {
@@ -92,7 +106,7 @@ export function createStatsService(deps: { statsRepo: StatsRepository }): StatsS
           key: 'queries' as const,
           label: 'Tus consultas al agente',
           value: queries,
-          sub: 'en total',
+          sub: 'últimos 30 días',
         },
       ];
 
@@ -101,7 +115,7 @@ export function createStatsService(deps: { statsRepo: StatsRepository }): StatsS
         kpis,
         activity,
         channels,
-        coverage: { readCount, totalCount, readPct },
+        coverage: { readCount: safeReadCount, totalCount, readPct },
       });
     },
   };
