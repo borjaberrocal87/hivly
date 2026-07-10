@@ -1,5 +1,27 @@
 # generated: 2026-06-30
-# last_updated: 2026-07-10 (story 9-5 in-progress → review, bmad-dev-story): topUsers block in
+# last_updated: 2026-07-10 (story 9-5 review → done, bmad-code-review): 3 adversarial layers @ Opus
+# (Blind Hunter / Edge Case Hunter / Acceptance Auditor). Auditor 0 AC/D/AD violations — AC1–AC6 +
+# D1–D7 all verified faithful vs source/schema/seed math (3+2+1+1+1+1=9 reconciles with resources KPI);
+# Edge Hunter called the diff clean. Triage: 0 decision-needed, 2 patch (both applied), 3 defer (Low),
+# 7 dismissed. Patches: (1) Completion Notes test-delta miscount +12/9+3 → +13/11+2 (headline 882
+# correct); (2) reworded the "same COALESCE chain" comment in embeddingSearch/documentRepository to
+# state anchor-row vs topUsers latest-across-messages resolution. Defers → deferred-work.md: SQL-vs-JS
+# ordering-collation coupling in the topUsers superRefine (unreachable for numeric snowflakes),
+# created_at-tie non-determinism in the latest-name array_agg pick (cosmetic; +d.id DESC if revisited),
+# tier-3 author_id "never ''" asserted-not-enforced (theoretical, mirrors 9.4 deferred Low). Dismissed =
+# LEFT JOIN users fan-out FP (idx_users_discord_id UNIQUE, verified schema.ts:100), integration-rows-not-
+# in-diff FP (base seed, math verified), ORDER BY count alias (ratified getChannelCounts convention),
+# superRefine <= intentional per D3, OpenAPI can't express ordering, unit-test naming (coverage adequate
+# via paired test), deleted-exclusion over whole message_ids (consistent-by-design with authors KPI).
+# Re-gate after comment-only SQL patches: lint 0 / build clean (5 pkgs); unit/integration inert (SQL
+# semantics byte-identical, PG ignores -- comments). Re-run (2nd pass, extra scrutiny at Borja's
+# request): Auditor re-confirmed 0 AC/D/AD violations + both patches truthful; review converged with
+# +2 new Low defers (tier-2 u.username='' asymmetry folded into the COALESCE-tiers defer; documents-repo
+# /blank-fallback coverage gap beyond AC5 scope, downgraded from Blind's Medium via Edge source-verify)
+# + 3 dismissed (redundant D5 empty-scope guard nit, 2 dup defers). Story stays done. UNCOMMITTED status
+# flip + 2 review patches on feat/9-5-stats-top-users (5 code commits already landed, PR #57 open).
+# Next: bmad-checkpoint-preview or bmad-dev-story (9-2 render, 9-3 e2e).
+# || (prior) story 9-5 in-progress → review, bmad-dev-story): topUsers block in
 # StatsResponse shipped on feat/9-5-stats-top-users. shared StatsTopUserSchema + required
 # topUsers key (count DESC/authorId ASC superRefine) + backend getTopUsers port/Drizzle
 # adapter (D1 array_agg…FILTER latest-non-blank-name pick, NULLIF('') hardened, D4 LIMIT 5) +
@@ -406,7 +428,7 @@ development_status:
   # (binding): 9-4 -> 9-5 -> (9-2 render, 9-3 e2e). author_name captured in the Bot, nullable +
   # COALESCE(author_name, users.username, author_id) fallback (no backfill). No new FR (FR24/FR25).
   9-4-bot-shared-captura-author-name-discord-messages: done
-  9-5-shared-backend-bloque-topusers-stats: review
+  9-5-shared-backend-bloque-topusers-stats: done
   epic-9-retrospective: optional
 
   # ── Operational backlog (post-roadmap) — no epic; see operational-backlog.md ─
