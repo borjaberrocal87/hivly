@@ -79,7 +79,10 @@ export const embeddings = pgTable(
   (table) => [
     uniqueIndex('idx_embeddings_chunk_key').on(table.chunkKey),
     index('idx_embeddings_vector').using('hnsw', table.embedding.op('vector_cosine_ops')),
-    index('idx_embeddings_channel').on(table.channelId),
+    // Composite replaces the old single-column channel index (D2 — (channel_id) is a
+    // prefix of (channel_id, created_at DESC), so every prior query stays served).
+    // Backs the stats endpoint's 14-day activity aggregation (AC4).
+    index('idx_embeddings_channel_created').on(table.channelId, table.createdAt.desc()),
   ],
 );
 
