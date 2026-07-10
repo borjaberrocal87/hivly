@@ -38,9 +38,29 @@ export const StatsCoverageSchema = z.object({
 
 export type StatsCoverage = z.infer<typeof StatsCoverageSchema>;
 
+/** The 4 KPIs in their fixed, contractual order (D3). Consumers may index positionally. */
+export const KPI_ORDER = ['resources', 'channels', 'authors', 'queries'] as const;
+
 /** GET /api/stats — RBAC-scoped knowledge KPIs, activity, channel volume, and coverage. */
 export const StatsResponseSchema = z.object({
-  kpis: z.array(StatsKpiSchema).length(4),
+  // `.length(4)` + `superRefine` pin both the count AND the fixed key order (AC1):
+  // a per-item `z.enum` alone would let `[resources,resources,resources,resources]`
+  // or a reordered array pass. The service is the sole producer, but the contract
+  // (AD-6) is the safety net 9.2 relies on.
+  kpis: z
+    .array(StatsKpiSchema)
+    .length(4)
+    .superRefine((kpis, ctx) => {
+      KPI_ORDER.forEach((key, i) => {
+        if (kpis[i]?.key !== key) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [i, 'key'],
+            message: `Expected kpis[${i}].key to be '${key}' (fixed order resources·channels·authors·queries)`,
+          });
+        }
+      });
+    }),
   activity: z.array(StatsActivityPointSchema).length(14),
   channels: z.array(StatsChannelSchema),
   coverage: StatsCoverageSchema,
