@@ -1,5 +1,13 @@
 # generated: 2026-06-30
-# last_updated: 2026-07-10 (story 9-2 in-progress → review, bmad-dev-story): StatsView + 3rd nav
+# last_updated: 2026-07-10 (epic-9-retrospective optional → done, bmad-retrospective): Epic 9 (Stats)
+# closed. 5/5 stories done, all PRs merged (#54/#56/#57/#58/#59), 0 prod incidents, 0 AC violations,
+# AD-12 held end-to-end. Retro doc: epic-9-retro-2026-07-10.md. 5 action items appended (AI-1..AI-5):
+# AI-1 Blind-Hunter down-weight (3rd recurrence, open), AI-2 formalize post-roadmap addition-mode,
+# AI-3 real deploy+observability (CRITICAL — never deployed to prod), AI-4 promote P2 correctness
+# items to stories, AI-5 load-sensitive integration intermittency. Significant reorientation: no
+# Epic 10 feature — work shifts from features-via-correct-course to operational hardening;
+# operational-backlog.md becomes the active plan. Borja's direction: "endurecer para producción real".
+# || (prior) last_updated: 2026-07-10 (story 9-2 in-progress → review, bmad-dev-story): StatsView + 3rd nav
 # entry implemented on feat/9-2-web-statsview exactly per plan (D1-D6 honored verbatim). Gate
 # green: lint 0 / 892 unit+web (+10) / build clean (5 pkgs) / 16 existing e2e chromium unchanged.
 # Integration not run (web-only, no shared/backend touch). Manual smoke confirmed real-data
@@ -503,7 +511,7 @@ development_status:
   # COALESCE(author_name, users.username, author_id) fallback (no backfill). No new FR (FR24/FR25).
   9-4-bot-shared-captura-author-name-discord-messages: done
   9-5-shared-backend-bloque-topusers-stats: done
-  epic-9-retrospective: optional
+  epic-9-retrospective: done
 
   # ── Operational backlog (post-roadmap) — no epic; see operational-backlog.md ─
   # Numbered ops-N to stay outside the epic sequence (Borja chose an explicit backlog
@@ -649,3 +657,23 @@ action_items:
     action: "Standing DoD (retained, now PROVEN): any story touching the LLM/StateGraph/new generative path is not done until exercised against the real provider (env-gated smoke). First live trigger in 7.2 caught a real config bug (provider:'anthropic' + non-Anthropic-shaped ENRICHMENT_LLM_API_KEY). Re-armed for any future agentic work. Homed in operational-backlog.md § Standing Definition-of-Done."
     owner: "Amelia (Dev)"
     status: done
+  - epic: 9
+    action: "AI-1 — Down-weight uncorroborated Blind Hunter findings: a Blind-only 'High/Medium' starts as needs-verification unless the Edge Case Hunter or Acceptance Auditor corroborates it. Consider a bmad-customize override. 3rd appearance of the pattern (carried from Epic 7 AI, recurred in reviews of 9.2/9.3/9.4 — all refuted against source)."
+    owner: "Amelia (Dev)"
+    status: open
+  - epic: 9
+    action: "AI-2 — Formalize the post-roadmap 'addition mode': Epics 8 and 9 were both correct-course-born additions with no stable planning container. Explicitly decide whether to keep operating in continuous-addition mode or open a real planning container for the hardening work."
+    owner: "John (PM) + Borja"
+    status: open
+  - epic: 9
+    action: "AI-3 — Real deploy + observability (CRITICAL to the stated 'harden for production' goal): first deployment to a real environment with metrics/alerts beyond the crash-only Notifier; write the general deploy runbook (today only the Epic 7 migration runbook exists in operational-backlog.md). Product is functionally complete but has never run in a real production environment."
+    owner: "Winston (Architect) + Amelia (Dev)"
+    status: open
+  - epic: 9
+    action: "AI-4 — Promote the P2 correctness items in operational-backlog.md to BMAD stories, priority order: messageDeleteBulk (P2.3, silent data loss on bulk purges), DLQ/retry-cap on failing Sync entries (P2.2), transactional outbox (P2.1)."
+    owner: "Amelia (Dev) + Winston (Architect)"
+    status: open
+  - epic: 9
+    action: "AI-5 — Close the load-sensitive integration intermittency (the residual that survived ops-2): codify 'don't run integration against a stack with live dev containers attached' as a hard gate, or make the tests deterministic under load. Carried from Epic 7 AI (no trigger in Epic 9 — stats path is read-only aggregation)."
+    owner: "Amelia (Dev)"
+    status: open
