@@ -4,7 +4,7 @@ baseline_commit: d9d05f20488cb6af0f837304069b0a4c522e8a0f
 
 # Story 9.4: bot + shared — Capture `author_name` in `discord_messages`
 
-Status: review
+Status: done
 
 ## Story
 
@@ -52,6 +52,18 @@ so that the upcoming "Top 5 usuarios más activos" section (Story 9.5) can show 
   - [x] Sync `docs/data-model.md` §1 (+ "only writer" caveat) and TECHNICAL-DESIGN §8 event interface + §6 ERD — the definitive list from AC6; backend-standards/spine confirmed no-change
   - [x] Run the full gate; paste outputs; state §3.3/§3.4 skips explicitly
   - [x] Commit slices: `feat(shared): …` (schema + migration + event type — contract changes are shared-scoped even when a consumer motivates them; additive/optional → **no `!`**), `feat(bot): …`, `feat(workers): …`, `docs(repo): …`. Branch `feat/9-4-author-name-capture` off up-to-date `main`. PR, never auto-merge → `bmad-code-review`.
+
+### Review Findings
+
+_Code review 2026-07-10 (bmad-code-review, 3 adversarial layers @ Opus — Blind Hunter / Edge Case Hunter / Acceptance Auditor). Auditor: 0 AC/D violations (AC1–AC6 + D1–D6 all verified). Result: 0 decision-needed, 0 patch, 1 defer (Low), 5 dismissed._
+
+- [x] [Review][Defer] Edit-path producer trusts the fetched message is fully hydrated — no runtime guard on `author.displayName` before it reaches `xAdd` [`packages/bot/src/discord/handlers/messageUpdate.ts:124`] — deferred, pre-existing. If `displayName` were ever runtime-`undefined`/non-string, `xAdd` would reject and the whole edit (content included) is dropped by the outer catch. Unreachable under discord.js 14.26.4 (`User#displayName` = `globalName ?? username`, non-null on a hydrated author) and rides on the SAME accepted hydration assumption as the existing `author.bot` read on the identical post-`fetch()` path. Deliberately NOT patched: the codebase convention is "producer trusts discord.js types, consumer validates at the stream trust boundary" (`parseUpdatedEvent` already normalizes absent/blank → `undefined`), and hardening only `displayName` (not `newContent`/`guildId`, equally trusted) would be inconsistent. Revisit only as a whole-producer stream-write hardening decision.
+
+- [x] [Review][Defer] Out-of-order / stale edit redelivery can regress a stored `author_name` (and `content`/`updated_at`) [`packages/workers/src/sync/processUpdate.ts:159-165`] — deferred, pre-existing. The step-6 `UPDATE` has no `WHERE updated_at <= ${timestamp}` monotonicity guard, so if an older edit event is replayed AFTER a newer one committed (failed→reclaimed from the PEL, or two scaled Sync workers interleaving), the older display name overwrites the newer. The `authorName !== undefined` guard prevents *blanking* but not *reverting*. **NOT new logic** — `content`/`updated_at` already ride the identical unguarded last-write-wins overwrite (pre-existing 6.2/7.3 behavior); this story merely extends the same staleness window to the new column. Raised independently by Blind Hunter + Edge Case Hunter (re-run). Fixing it means a monotonicity guard on the whole UPDATE — a Sync-worker concern, out of scope for a 9.4 author_name story.
+
+_Re-run 2026-07-10 (identical diff, extra scrutiny): Auditor re-confirmed 0 AC/D/AD violations (each test file + docs opened, not just the diff; migration byte-exact incl. no trailing newline; AD-2/AD-13 honored). Added the out-of-order defer above; 9 further findings dismissed — the Blind Hunter's two Mediums were verified false positives against source: (a) the "`Record<keyof T,string>` forces the key" comment is accurate — the producer IS typed that way at `messageUpdate.ts:117` (Blind lacked source); (b) `authorName: undefined` compiles fine — `exactOptionalPropertyTypes` is unset repo-wide (default false), and the gate is green. Also dismissed: the "production adapter absent" worry (structural slices — real discord.js Messages are assignable, tsc green), unit-test substring-match weakness + `sqlText` empty-fragment (ratified `s.includes` convention; the real SQL correctness is proven by the `sync.integration.test.ts` DB-row assertion), MessageCreatedEvent asymmetry (AC3-mandated), and two contrived seed/coverage nits._
+
+**Dismissed (verified false positives / spec-sanctioned):** (1) create-path stores `displayName` verbatim without trim — insert has no stored name to blank-overwrite (`onConflictDoNothing`) and `username` is never empty, so the update-path normalization's concern (D3) does not apply to a fresh INSERT; (2) "every edit overwrites `author_name`" — ratified D4 (newer display name = newer truth), confirmed deliberate by the reporting layer itself; (3) historical rows stay `NULL` — ratified D5 "no backfill" + planned 9.5 `COALESCE`, by design; (4) rename without a content edit not captured — ratified D5 explicitly ("accepted, consistent with no-backfill"); (5) a literal `''` passed directly to `processUpdate` would blank the column — not reachable, the only production caller is `parseUpdatedEvent`, which guarantees `undefined` for blanks, so D3 holds.
 
 ## Dev Notes
 
