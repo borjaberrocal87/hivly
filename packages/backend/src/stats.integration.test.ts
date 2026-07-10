@@ -168,6 +168,12 @@ describe('GET /api/stats (integration)', () => {
     await insertMessage(convMember, 'user', 'first question');
     await insertMessage(convMember, 'assistant', 'an answer');
     await insertMessage(convMember, 'user', 'second question');
+    // A >30-day-old own `user` message that MUST be excluded by the queries KPI window
+    // (RP4 — without the `created_at >= fromDate` filter this would push the count to 3).
+    await clients.db.execute(sql`
+      INSERT INTO messages (conversation_id, role, content, citations, created_at)
+      VALUES (${convMember}, 'user', 'ancient question', '[]'::jsonb, now() - interval '31 days')
+    `);
     const convOther = await insertConversation(otherUserId);
     await insertMessage(convOther, 'user', "another user's question");
 
@@ -294,8 +300,9 @@ describe('GET /api/stats (integration)', () => {
     expect(queriesKpi).toEqual({
       key: 'queries',
       label: 'Tus consultas al agente',
-      value: 2, // 2 own `user` messages — not the assistant reply, not the other user's message
-      sub: 'en total',
+      value: 2, // 2 own recent `user` messages — not the assistant reply, not the other
+      // user's message, and NOT the >30-day-old one (excluded by the 30-day window, RP4)
+      sub: 'últimos 30 días',
     });
   });
 });

@@ -59,10 +59,12 @@ export interface StatsRepository {
   getCoverageReadCount(userId: string, allowedChannelIds: string[]): Promise<number>;
 
   /**
-   * All-time count of `userId`'s own `role = 'user'` messages across their
-   * conversations (D3 `queries` KPI). No `channel_id` — this is the one
-   * exception to AD-12 channel scoping (per-user data has no leak surface) and
-   * ALWAYS runs, even when `allowedChannelIds` is empty (D6).
+   * Count of `userId`'s own `role = 'user'` messages across their conversations
+   * within `[fromDate, now]` (D3 `queries` KPI — 30-day window, review decision
+   * 2026-07-10). `fromDate` is an ISO 8601 UTC timestamp computed by the service
+   * (single-clock determinism). No `channel_id` — this is the one exception to
+   * AD-12 channel scoping (per-user data has no leak surface) and ALWAYS runs,
+   * even when `allowedChannelIds` is empty (D6).
    */
-  countUserAgentQueries(userId: string): Promise<number>;
+  countUserAgentQueries(userId: string, fromDate: string): Promise<number>;
 }

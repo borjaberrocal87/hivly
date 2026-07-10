@@ -129,14 +129,18 @@ export function createDrizzleStatsRepository(db: Database): StatsRepository {
       return Number(row?.read ?? 0);
     },
 
-    async countUserAgentQueries(userId: string): Promise<number> {
+    async countUserAgentQueries(userId: string, fromDate: string): Promise<number> {
       // D3/D6: per-user data, no `channel_id` column to scope by — always runs,
-      // even when the caller has an empty channel scope.
+      // even when the caller has an empty channel scope. Windowed to `fromDate`
+      // (30 days, review decision 2026-07-10) — the bound is computed by the
+      // service from its `now`, so the whole response is anchored to one clock.
       const result = await db.execute(sql`
         SELECT count(*)::int AS "queries"
         FROM messages m
         JOIN conversations c ON c.id = m.conversation_id
-        WHERE c.user_id = ${userId} AND m.role = 'user'
+        WHERE c.user_id = ${userId}
+          AND m.role = 'user'
+          AND m.created_at >= ${fromDate}
       `);
 
       const row = result.rows[0] as Record<string, unknown> | undefined;
