@@ -6,7 +6,7 @@ baseline_commit: 23cdbe39e07488c07c4c0068730bbfbc1a22fea8
 
 # Story 9.3: e2e — Extender el harness visual (Playwright) a la vista Estadísticas
 
-Status: review
+Status: done
 
 <!-- Ultimate context engine analysis completed - comprehensive developer guide created
      (deep-dive: full harness current-state incl. seed math + spec ordering, StatsView
@@ -560,3 +560,16 @@ clean (backend/bot/shared/workers tsc --noEmit, web vite build).
 - `packages/web/tests/README.md` — modified (seed-identities table extended
   with the RBAC canary trio + `/api/stats` figures; spec-discovery order
   rewritten to the full 5-file alphabetical order with the D1 rationale).
+
+### Review Findings
+
+Code review 2026-07-10 (`bmad-code-review`): 3 adversarial layers (Blind Hunter,
+Edge Case Hunter — full source access, Acceptance Auditor). Auditor verdict PASS
+(AC1–AC8 + D1–D8 all conformant); Edge Case Hunter found 0 High/Medium after
+source verification and refuted 2 of Blind Hunter's findings. 0 decision-needed,
+0 patch, 2 defer, 7 dismissed.
+
+- [x] [Review][Defer] Activity chart has no positive-path (non-zero data) coverage [packages/web/tests/analytics.spec.ts:305-307,486-488] — deferred, ratified by D5. Every activity-chart assertion binds to all-zero seed data (all 14 bars asserted `height 4px`); a regression that ignored its data array and always emitted 4px stubs would pass green. Ratified out of scope by D5 ("activity stays all-zero; value-level activity math is 9.1 integration's job — the harness asserts the render"); the shared `Math.round((count/max)*100)` bar-scaling IS exercised end-to-end via the channel (100%/67%) and top-user (100%/67%) fills, so only the activity-chart height mapping is uncovered at the e2e level.
+- [x] [Review][Patch] APPLIED — Seed header comment "Only r1/r2 carry author_name" is factually wrong [packages/backend/src/e2e/seed.ts:18-20] — the `e2e-role-none` bullet states "Only `e2e-msg-r1`/`e2e-msg-r2` carry `author_name` … the rest resolve via COALESCE fallback to the raw `author_id`", but `e2e-msg-s1` (the D3 canary) also carries `authorName: 'Eve Intrusa'` and does NOT resolve via fallback. Comment-only inaccuracy (the README at tests/README.md:139-140 already scopes it correctly to ada/linus); reword to "Among the member-visible messages, only r1/r2 carry `author_name` (the out-of-scope canary `e2e-msg-s1` also carries one, deliberately, so the leak canary is meaningful)". Found in 2nd review pass (Blind Hunter). Zero-risk documentation fix.
+- [x] [Review][Defer] `page.route('**/api/stats', …)` glob would miss a future query-string variant [packages/web/tests/analytics.spec.ts:460] — deferred, robustness. The AC7a error-state intercept uses `**/api/stats`, which Playwright anchors at the URL end — it matches `/api/stats` (the endpoint is param-free today, verified) but would silently NOT match `/api/stats?days=14`, letting the real backend response through and failing the error assertion. Not a current defect; future-proof with `**/api/stats*`. Found in 2nd review pass (Blind Hunter).
+- [x] [Review][Defer] RBAC text canaries are narrower than the count-based canaries [packages/web/tests/analytics.spec.ts:449-450] — deferred, mitigated. `getByText('#secreto')`/`getByText('Eve Intrusa')` `toHaveCount(0)` implement AC6 verbatim but would miss a leak rendering the raw channel name (`secreto` without `#`) or the `author_id` COALESCE fallback (`e2e-author-eve`) instead of the display name. Mitigated on two fronts: (1) the count/figure assertions (KPI resources 5, 2 channel rows, 2 top-user rows, authors 2) are the primary leak discriminators per the discrimination DoD and flip on ANY leak; (2) given the seed, a real leak renders as `#secreto` (StatsView prefixes `#`) and `Eve Intrusa` (Eve has a non-null `author_name`), so the text canaries do catch the realistic leak. Optional hardening: add `secreto`/`e2e-author-eve` to the absence set.

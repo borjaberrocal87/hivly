@@ -151,7 +151,12 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-10  # story 9-3 in-progress → review (bmad-dev-story): FINAL Epic 9 story
+last_updated: 2026-07-10  # story 9-3 review → done (bmad-code-review): 3 adversarial layers @ Opus,
+# Auditor PASS (AC1-AC8 + D1-D8 conformant), Edge Case Hunter 0 High/Medium (full source verify,
+# refuted 2 Blind findings), 0 patch / 0 decision-needed / 2 Low defers (activity positive-path
+# coverage ratified-out by D5; RBAC text canaries narrower than the count-based canaries, mitigated).
+# FINAL Epic 9 story — epic-9 can flip to done (retrospective optional).
+# || (prior) last_updated: 2026-07-10  # story 9-3 in-progress → review (bmad-dev-story): FINAL Epic 9 story
 # implemented on feat/9-3-e2e-stats-harness off 23cdbe3. Seed extended (seed.ts ONLY): D1 authorName
 # field, D2 partial author_name on e2e-msg-r1/r2 only, D3 RBAC canary trio (e2e-ch-secreto +
 # e2e-msg-s1 'Eve Intrusa' + its embedding, all dated a shared SEED_NOW "today"), D4 conversation
@@ -488,10 +493,10 @@ development_status:
   # KPIs + 14-day indexing activity + per-channel volume + read coverage. Aggregates
   # over existing data (no new ingestion, no new table). Moderate. AD-12 RATIFIED:
   # every aggregation filters by allowedChannelIds inside the SQL. Single GET /api/stats.
-  epic-9: in-progress
+  epic-9: done
   9-1-shared-backend-contrato-stats-endpoint-agregacion-rbac-scoped: done
   9-2-web-statsview-tercera-entrada-nav: done
-  9-3-e2e-extender-harness-visual-estadisticas: review
+  9-3-e2e-extender-harness-visual-estadisticas: done
   # Added 2026-07-10 via bmad-correct-course (sprint-change-proposal-2026-07-10-topusers.md):
   # "Top 5 usuarios" promoted from the 9.1 review (D9) to its own layered pair. Sequence
   # (binding): 9-4 -> 9-5 -> (9-2 render, 9-3 e2e). author_name captured in the Bot, nullable +
