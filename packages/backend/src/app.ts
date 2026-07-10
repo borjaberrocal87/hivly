@@ -18,6 +18,7 @@ import { createDocumentService } from './application/services/documentService.js
 import { createRbacService } from './application/services/rbacService.js';
 import { createReadStatusService } from './application/services/readStatusService.js';
 import { createSearchService } from './application/services/searchService.js';
+import { createStatsService } from './application/services/statsService.js';
 import type { ChatModel } from './domain/repositories/chatModel.js';
 import type { DiscordOAuthClient } from './domain/repositories/discordOAuthClient.js';
 import type { QueryEmbedder } from './domain/repositories/queryEmbedder.js';
@@ -29,6 +30,7 @@ import { createDrizzleEmbeddingSearchRepository } from './infrastructure/embeddi
 import { createFetchDiscordOAuthClient } from './infrastructure/discordOAuthClient.fetch.js';
 import { createDrizzleRagRetriever } from './infrastructure/ragRetriever.drizzle.js';
 import { createDrizzleReadStatusRepository } from './infrastructure/readStatusRepository.drizzle.js';
+import { createDrizzleStatsRepository } from './infrastructure/statsRepository.drizzle.js';
 import type { RedisClient } from '@hivly/shared/redis';
 import { createSessionMiddleware } from './infrastructure/sessionStore.js';
 import { createDrizzleUserRepository } from './infrastructure/userRepository.drizzle.js';
@@ -41,6 +43,7 @@ import { createConversationController } from './presentation/controllers/convers
 import { createDocumentController } from './presentation/controllers/documentController.js';
 import { createReadStatusController } from './presentation/controllers/readStatusController.js';
 import { createSearchController } from './presentation/controllers/searchController.js';
+import { createStatsController } from './presentation/controllers/statsController.js';
 import { createAuthRouter } from './routes/authRoutes.js';
 import { createChannelsRouter } from './routes/channelsRoutes.js';
 import { createChatRouter } from './routes/chatRoutes.js';
@@ -48,6 +51,7 @@ import { createConversationRouter } from './routes/conversationRoutes.js';
 import { createDocumentRouter } from './routes/documentRoutes.js';
 import { createReadStatusRouter } from './routes/readStatusRoutes.js';
 import { createSearchRouter } from './routes/searchRoutes.js';
+import { createStatsRouter } from './routes/statsRoutes.js';
 
 /** Fallback turn-count window when `agentMemoryWindow` isn't injected (tests). */
 const DEFAULT_AGENT_MEMORY_WINDOW = 20;
@@ -219,6 +223,15 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
   const readStatusService = createReadStatusService({ readStatusRepo });
   const readStatusController = createReadStatusController({ readStatusService });
   app.use('/api/read-status', createReadStatusRouter(readStatusController));
+
+  // Stats (Epic 9, Story 9.1). Registered AFTER the /api gate, so it inherits
+  // requireAuth + the RBAC middleware (no extra rate limiter — inherits the
+  // `api` tier) — every channel-scoped aggregation embeds allowedChannelIds
+  // inside the SQL (AD-12).
+  const statsRepo = createDrizzleStatsRepository(db);
+  const statsService = createStatsService({ statsRepo });
+  const statsController = createStatsController({ statsService });
+  app.use('/api/stats', createStatsRouter(statsController));
 
   // Channels (Epic 4, Story 4.3). Registered AFTER the /api gate, so it inherits
   // requireAuth + the RBAC middleware — reuses the rbacService built above.
