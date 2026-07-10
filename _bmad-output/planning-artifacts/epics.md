@@ -1065,10 +1065,25 @@ de lectura personal. Sin ingesta nueva (agrega sobre datos existentes); sin tabl
   (migración reemplaza el índice de un solo canal, sin tabla nueva) + test de integración RBAC que
   prueba la exclusión de canales fuera de alcance.
 - **Historia 9.2 · web:** `StatsView` + 3ª entrada de nav "Estadísticas" (mismo patrón AppLayout
-  que Búsqueda/Documentos, UX-DR5); KPI cards, bar-chart de actividad, barras por canal y donut de
-  cobertura; tipos vía `z.infer<StatsResponse>`; sin dependencia de gráficos (flex/grid + gradientes CSS).
+  que Búsqueda/Documentos, UX-DR5); KPI cards, bar-chart de actividad, barras por canal, donut de
+  cobertura y la sección **Top 5 usuarios más activos** (lista `topUsers` — nombre + count, del
+  contrato 9.5); tipos vía `z.infer<StatsResponse>`; sin dependencia de gráficos (flex/grid +
+  gradientes CSS). El render de Top 5 depende de que 9.5 haya aterrizado.
 - **Historia 9.3 · e2e:** extender el harness visual Playwright (patrón Epic 4/7) a la vista de
-  estadísticas con seed determinista y RBAC-consistente.
+  estadísticas con seed determinista y RBAC-consistente, **incluyendo la sección Top 5 usuarios**
+  (seed de autores con `author_name` y assert de orden/exclusión de canal denegado).
+- **Historia 9.4 · bot + shared:** capturar el nombre visible del autor en la ingesta. Nueva
+  columna nullable `discord_messages.author_name` (DDL en `schema.ts`, AD-5) + migración generada;
+  el Bot la escribe en los handlers de `create` y `edit` (Épico 6), tomándola del `author` del
+  mensaje de Discord (username/displayName). Sin backfill: las filas antiguas quedan `NULL` y se
+  resuelven vía `COALESCE(author_name, users.username, author_id)` aguas abajo.
+- **Historia 9.5 · shared + backend:** extender el contrato `StatsResponse` con el bloque
+  `topUsers` (AD-6) y servirlo desde `GET /api/stats`. Shape `{ authorId, authorName, count }`,
+  orden `count DESC, authorId ASC`, **límite 5**; query RBAC-scoped in-SQL (AD-12): Top 5
+  `author_id` por count de embeddings no borrados y con scope cuyo autor-ancla (`message_ids[1]`)
+  sea ese `author_id`, `authorName = COALESCE(dm.author_name, u.username, dm.author_id)`; test de
+  integración que prueba la exclusión del canal denegado en `topUsers` + docs (`api-spec.yml`).
+  **Depende de 9.4.** Secuencia binding del añadido: 9.4 → 9.5 → (9.2 render, 9.3 e2e).
 
 > **KPIs (ratificado 2026-07-10):** los 4 cards son **Recursos indexados · Canales · Autores ·
 > Tus consultas al agente**. Los 3 primeros RBAC-scoped por `allowedChannelIds` (AD-12). El 4º
@@ -1076,3 +1091,11 @@ de lectura personal. Sin ingesta nueva (agrega sobre datos existentes); sin tabl
 > usuario (`conversations`/`messages`, Epic 5) — métrica **per-usuario**, sin `channel_id`, por lo
 > que no aplica el filtro de canal y no hay fuga. La **cobertura de lectura** la cubre el donut
 > (no se duplica como KPI).
+
+> **Top 5 usuarios (añadido 2026-07-10, `sprint-change-proposal-2026-07-10-topusers.md`):** la 5ª
+> sección del mock (`Top 5 · usuarios más activos`) se incorpora al contrato como bloque `topUsers`
+> (RBAC-scoped, AD-12) vía las historias **9.4** (captura de `author_name` en el Bot) + **9.5**
+> (bloque `topUsers` en el contrato + endpoint). Promovida desde la review de la Historia 9.1
+> (decisión D9) para no ampliar su alcance en revisión. **No añade FR nuevo** — es parte de la vista
+> de Estadísticas (FR24) y respeta FR25. Nombre real para mensajes nuevos; los antiguos degradan vía
+> `COALESCE(author_name, users.username, author_id)` (sin backfill).
