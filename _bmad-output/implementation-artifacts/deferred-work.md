@@ -25,7 +25,7 @@
 
 ## Deferred from: story creation of 6-1-bot-deteccion-de-ediciones-y-borrados-en-tiempo-real (2026-07-08)
 
-- `messageDeleteBulk` (Discord moderation bulk-purge) is a **separate** Gateway event from `messageDelete` and is out of scope for Story 6.1 (the epic specifies `messageDelete` only). Consequence: if a moderator bulk-deletes N messages at once, those deletions are NOT published to `hivly:discord:messages:deleted` and won't sync until offline reconciliation (Story 6.3) — or a dedicated follow-up. A follow-up would register `Events.MessageBulkDelete`, iterate the deleted collection, and publish one `discord.message.deleted` per message through the same `handleMessageDelete` path. **[DECIDED with Borja, 2026-07-08]** to defer.
+- `messageDeleteBulk` (Discord moderation bulk-purge) is a **separate** Gateway event from `messageDelete` and is out of scope for Story 6.1 (the epic specifies `messageDelete` only). Consequence: if a moderator bulk-deletes N messages at once, those deletions are NOT published to `share2brain:discord:messages:deleted` and won't sync until offline reconciliation (Story 6.3) — or a dedicated follow-up. A follow-up would register `Events.MessageBulkDelete`, iterate the deleted collection, and publish one `discord.message.deleted` per message through the same `handleMessageDelete` path. **[DECIDED with Borja, 2026-07-08]** to defer.
 
 ## Deferred from: code review of 5-3-widget-flotante-fab-panel-base, round 2 (2026-07-07)
 
@@ -56,9 +56,9 @@
 - `SIBLING_SERVICES` array duplicated across ESLint config objects — code style, not a bug
 - `"build": "tsc --noEmit"` is misleading — intentional at scaffold; documented in story completion notes
 - No `vitest.config.ts` in any package — Vitest defaults work for scaffold; workspace config needed before cross-package tests
-- `@hivly/shared` exports raw `.ts` source — intentional decision documented in completion notes (avoids `composite: true` conflict)
+- `@share2brain/shared` exports raw `.ts` source — intentional decision documented in completion notes (avoids `composite: true` conflict)
 - `exports` field blocks future subpath entrypoints — add wildcard when sub-exporters land
-- New `@hivly/*` package would not be auto-covered by ESLint cross-service ban — manual registration needed
+- New `@share2brain/*` package would not be auto-covered by ESLint cross-service ban — manual registration needed
 - No `uncaughtException`/`SIGTERM`/`SIGINT` handlers in any service — scaffold stage, error handling framework lands later
 - `--if-present` on root typecheck/build scripts could silently skip packages missing those scripts — all 5 packages currently have them
 - `.env.example.*` variants not tracked by `.gitignore` negation — edge case, team can add rules if needed
@@ -68,7 +68,7 @@
 ## Deferred from: code review of 1-3-docker-compose-servicios-base-y-endpoint-health (2026-07-04)
 
 - DB/Redis connections created before HTTP listens — lazy redis + pool pattern mitigate this; not a real issue in practice
-- Missing Hivly.config.yml crashes containers — standard Docker behavior for missing bind mounts; documented in Dev Notes
+- Missing Share2Brain.config.yml crashes containers — standard Docker behavior for missing bind mounts; documented in Dev Notes
 - No integration test for health handler — unit tests cover logic; HTTP-level tests can be added in a later story
 - redis maxRetriesPerRequest: 1 is aggressive — tuning parameter; 503 on transient Redis outage is acceptable
 - Timeout test not explicitly covered — promise that never resolves not tested; both paths fall into the same catch of probe()
@@ -124,8 +124,8 @@
 
 ## Decisions & deferrals from: Story 3.3 (Workers — Indexer, 2026-07-06)
 
-- **Retry-max / DLQ policy — DECIDED (SPINE §Deferred assigned this decision to this story):** the consumer group's PEL *is* the dead-letter queue. No retry-max and no per-entry poison quarantine: a failed entry stays pending (un-ACKed) and is re-processed by the PEL replay on the next worker boot. Malformed/foreign entries (which can never succeed) are the one exception — they are XACKed so they don't clog the PEL. No `MAXLEN`/`XTRIM` on `hivly:discord:messages` yet.
-- **Stream trimming (`MAXLEN`/retention) — STILL DEFERRED:** with no `MAXLEN`, `hivly:discord:messages` grows unbounded. Accepted at self-hosted scale; a future retention/trimming story must decide the cap (and confirm it can't trim entries still pending in any group's PEL).
+- **Retry-max / DLQ policy — DECIDED (SPINE §Deferred assigned this decision to this story):** the consumer group's PEL *is* the dead-letter queue. No retry-max and no per-entry poison quarantine: a failed entry stays pending (un-ACKed) and is re-processed by the PEL replay on the next worker boot. Malformed/foreign entries (which can never succeed) are the one exception — they are XACKed so they don't clog the PEL. No `MAXLEN`/`XTRIM` on `share2brain:discord:messages` yet.
+- **Stream trimming (`MAXLEN`/retention) — STILL DEFERRED:** with no `MAXLEN`, `share2brain:discord:messages` grows unbounded. Accepted at self-hosted scale; a future retention/trimming story must decide the cap (and confirm it can't trim entries still pending in any group's PEL).
 - **A stale extra chunk in one narrow crash window is accepted, not compensated:** if a crash lands between the upsert tx and the XACKs and a *later, differently-composed* batch regroups an unstamped message under a different first-id, a superseded chunk could linger. Only reachable through that window; overwritten/ignored at query time by similarity. Documented in `indexBatch.ts` / the story's Dev Notes — do not build compensation for it.
 
 ## Deferred from: code review of story-4.2 (2026-07-06)
@@ -138,7 +138,7 @@
 
 - **`reuseExistingServer: !process.env.CI` + boot-only seeding** [`packages/web/playwright.config.ts:521,527`]: a stale, manually-left-running local `e2e:server` process (e.g. kept open in a separate terminal to watch logs) would answer the health check without re-seeding, so a fresh test run would see already-mutated data (the docs spec's mark-all-read test). Not a problem in the normal fresh-run flow (each `npm run test:e2e` invocation starts and tears down its own server, matching the story's "3 consecutive green runs" claim) — only a footgun for the "reusable harness" goal (AC8, Stories 5.3/5.4). Worth a README caution, not a behavior change.
 - **`seed.ts` delete+insert sequence not transactional** [`packages/backend/src/e2e/seed.ts:322-375`]: a mid-sequence failure (e.g. a future migration changing `vector(1536)`) could leave partial `e2e-`-prefixed rows. Self-healing — the next boot's reset-then-seed cleans it up before the next run.
-- **`tsconfig.json` drops `rootDir` and merges Node ambient types into the app tsconfig** [`packages/web/tsconfig.json`]: rather than giving the Playwright specs their own tsconfig, `tests/` was folded into the same config that type-checks `src/`. Verified empirically safe (`npm run typecheck -w @hivly/web` passes clean, no DOM/Node type-declaration conflicts) — but still weakens the type-check boundary between Node-context tests and browser-context app code going forward; a dedicated `tests/tsconfig.json` would be cleaner.
+- **`tsconfig.json` drops `rootDir` and merges Node ambient types into the app tsconfig** [`packages/web/tsconfig.json`]: rather than giving the Playwright specs their own tsconfig, `tests/` was folded into the same config that type-checks `src/`. Verified empirically safe (`npm run typecheck -w @share2brain/web` passes clean, no DOM/Node type-declaration conflicts) — but still weakens the type-check boundary between Node-context tests and browser-context app code going forward; a dedicated `tests/tsconfig.json` would be cleaner.
 - **`E2E_BACKEND_PORT` not validated as numeric** [`packages/backend/src/e2e/server.ts:413`]: a non-numeric override (e.g. `"abc"`) still throws inside `app.listen()`, caught by `main().catch` — fails loudly but without a clear custom message. (The empty-string case was fixed in the 2nd review pass by switching `??` to `||`; general numeric validation remains deferred.) Low-likelihood misconfiguration.
 - **`session.ts` assumes the login redirect always has a `Location` header** [`packages/web/tests/helpers/session.ts:768`]: a missing header would throw a generic `new URL(undefined)` TypeError instead of a clear assertion failure. Only reachable via a backend bug elsewhere in the auth flow, not from this harness's own logic.
 
@@ -154,7 +154,7 @@
 
 ## Deferred from: Story 5.4 (Chat messages + streaming UI, 2026-07-08)
 
-- **Execution-trace "loop de ejecución" panel (UX-DR20) — DEFERRED (D1):** the epic AC 5.4 and UX-DR20 describe an agent execution-trace panel with `tool_call` (`#F5A623`) and `observation` (`#3BA55D`) steps. The backend does **not** produce these: `SSEFrameSchema` (`packages/shared/src/schemas/sse.ts`) is a 4-variant union (`token`/`citation`/`done`/`error`), the StateGraph (`packages/backend/src/agent/graph.ts`) is `START → retrieve → reason → respond → END` with **no `tool_exec` node** (only a future-extension comment), and the prototype's trace steps are hardcoded `setTimeout` fakes. Building it for real is a future **backend + shared** story: LLM tool-use, tools defined in `Hivly.config.yml`, a conditional `tool_exec` loop in the StateGraph, and widening `SSEFrameSchema` with `tool_call`/`observation` frames (+ the frontend trace panel). Story 5.4 is frontend-only and deliberately did not touch that surface.
+- **Execution-trace "loop de ejecución" panel (UX-DR20) — DEFERRED (D1):** the epic AC 5.4 and UX-DR20 describe an agent execution-trace panel with `tool_call` (`#F5A623`) and `observation` (`#3BA55D`) steps. The backend does **not** produce these: `SSEFrameSchema` (`packages/shared/src/schemas/sse.ts`) is a 4-variant union (`token`/`citation`/`done`/`error`), the StateGraph (`packages/backend/src/agent/graph.ts`) is `START → retrieve → reason → respond → END` with **no `tool_exec` node** (only a future-extension comment), and the prototype's trace steps are hardcoded `setTimeout` fakes. Building it for real is a future **backend + shared** story: LLM tool-use, tools defined in `Share2Brain.config.yml`, a conditional `tool_exec` loop in the StateGraph, and widening `SSEFrameSchema` with `tool_call`/`observation` frames (+ the frontend trace panel). Story 5.4 is frontend-only and deliberately did not touch that surface.
 
 ## Deferred from: code review of story-6.3 (2026-07-08)
 
