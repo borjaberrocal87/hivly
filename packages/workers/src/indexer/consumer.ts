@@ -11,6 +11,7 @@ import type { RedisClient } from '@share2brain/shared/redis';
 import { CONSUMER_GROUPS, STREAM_KEYS } from '@share2brain/shared/types/events';
 
 import type { EnrichmentChatModel } from '../enrichment/enrich.js';
+import { resolveEnrichmentRateLimit } from '../enrichment/rateLimiter.js';
 import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import type { Logger } from '../logger.js';
 import { DEFAULT_REAP_INTERVAL_MS, reapPoisonEntries } from '../streams/poisonReaper.js';
@@ -44,6 +45,10 @@ export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
   const { redis, db, embedder, config, logger, enrichModel, guard, signal } = deps;
   const stream = STREAM_KEYS.DISCORD_MESSAGES;
   const group = CONSUMER_GROUPS.INDEXER;
+  // M-5: resolve the enrichment spend budget once at boot and thread it (plus
+  // the consumer's own Redis client) into every indexBatch call. Absent config
+  // block → disabled → the pipeline behaves exactly as before.
+  const rateLimit = resolveEnrichmentRateLimit(config);
 
   // AC-1: idempotent group creation — BUSYGROUP means "already exists", the
   // "create if not exists" of the AC. Any other error is fatal.
@@ -66,7 +71,7 @@ export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
     const entries = (res?.[0]?.messages ?? []) as RawStreamEntry[];
     if (entries.length === 0) break;
     logger.info('replaying pending entries', { count: entries.length });
-    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger, enrichModel, guard, signal });
+    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger, enrichModel, guard, signal, redis, rateLimit });
     for (const id of ackIds) await redis.xAck(stream, group, id);
     replayId = entries[entries.length - 1].id; // move past this batch, acked or not
   }
@@ -84,7 +89,7 @@ export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
       try {
         const reclaimed = await reapPoisonEntries({ redis, stream, group, consumer: CONSUMER, logger });
         if (reclaimed.length > 0) {
-          const retry = await indexBatch({ entries: reclaimed, db, embedder, config, logger, enrichModel, guard, signal });
+          const retry = await indexBatch({ entries: reclaimed, db, embedder, config, logger, enrichModel, guard, signal, redis, rateLimit });
           for (const id of retry.ackIds) await redis.xAck(stream, group, id);
         }
       } catch (err) {
@@ -104,7 +109,7 @@ export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
     if (!res) continue; // BLOCK timeout, no new entries
     const entries = (res[0]?.messages ?? []) as RawStreamEntry[];
     if (entries.length === 0) continue;
-    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger, enrichModel, guard, signal });
+    const { ackIds } = await indexBatch({ entries, db, embedder, config, logger, enrichModel, guard, signal, redis, rateLimit });
     for (const id of ackIds) await redis.xAck(stream, group, id);
   }
 }
