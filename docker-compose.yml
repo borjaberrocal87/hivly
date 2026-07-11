@@ -1,10 +1,28 @@
 # Share2Brain — full stack (AC1: exactly 7 services).
 #   postgres, redis ─→ migrator (one-shot) ─→ bot, workers, backend ─→ nginx
 #
-# Secrets come from .env (env_file); in-container hostnames override the
-# localhost URLs via `environment:` (containers reach postgres/redis by service
-# name, never localhost). Behavior config is mounted read-only at
-# /app/Share2Brain.config.yml. Images are pinned — never :latest.
+# Secrets are interpolated from .env (compose auto-reads ./.env for ${VAR}
+# expansion). M-12: each service receives ONLY the vars it consumes via an
+# explicit `environment:` block — the blanket `env_file: - .env` (which dumped
+# EVERY secret into EVERY container) is gone. In-container hostnames override
+# the localhost URLs (containers reach postgres/redis by service name, never
+# localhost). Behavior config is mounted read-only at /app/Share2Brain.config.yml.
+# Images are pinned — never :latest.
+#
+# NOTE (M-12): loadConfig() in @share2brain/shared interpolates every ${VAR}
+# string leaf of the WHOLE Share2Brain.config.yml tree at startup, and every
+# app service that mounts the config (backend/bot/workers) calls it. So each of
+# those services must receive every ${VAR} referenced in the config
+# (DISCORD_GUILD_ID, LLM/EMBEDDINGS/ENRICHMENT keys + base URLs, FRONTEND_URL,
+# SENTRY_DSN, SLACK_WEBHOOK_URL) even when the service itself never calls that
+# provider — otherwise loadConfig aborts. The blocks below pass that config set
+# PLUS the service's own direct requireEnv/process.env reads, and nothing more.
+# migrator does NOT mount the config, so it needs only DATABASE_URL.
+#
+# M-14: two networks isolate the edge from the data tier — `frontend` (nginx +
+# backend) and `data` (backend + bot + workers + migrator + postgres + redis).
+# nginx sits only on `frontend`, so it cannot reach postgres/redis directly;
+# backend bridges the two. Redis now requires a password (${REDIS_PASSWORD}).
 
 services:
   # ── Data stores ────────────────────────────────────────────────────────────
@@ -19,6 +37,8 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U share2brain -d share2brain"]
       interval: 5s
@@ -27,9 +47,19 @@ services:
 
   redis:
     image: redis:8-alpine
-    command: redis-server --appendonly yes
+    # M-14: require a password and persist the AOF to a named volume. The
+    # container reads REDIS_PASSWORD from its env so both the server and the
+    # healthcheck use the same value ($$ escapes compose interpolation → the
+    # literal shell var inside the container).
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: sh -c 'exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes --dir /data'
+    volumes:
+      - redisdata:/data
+    networks:
+      - data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -40,10 +70,11 @@ services:
       context: .
       dockerfile: Dockerfile.migrator
     command: npx drizzle-kit migrate
-    env_file:
-      - .env
+    # M-12: migrator does not load Share2Brain.config.yml — DATABASE_URL only.
     environment:
       DATABASE_URL: postgres://share2brain:${POSTGRES_PASSWORD}@postgres:5432/share2brain
+    networks:
+      - data
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,18 +86,36 @@ services:
     build:
       context: .
       dockerfile: packages/backend/Dockerfile
-    env_file:
-      - .env
+    # M-12: backend = its own reads (Discord OAuth login, session, CORS) + the
+    # full config-interpolation set. It is the ONLY service that gets the OAuth
+    # client secret / redirect and SESSION_SECRET.
     environment:
       DATABASE_URL: postgres://share2brain:${POSTGRES_PASSWORD}@postgres:5432/share2brain
-      REDIS_URL: redis://redis:6379
-      # LLM (RAG, Epic 5) + embeddings (search query, Epic 4). base_url only for "custom".
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Discord OAuth login flow (requireEnv in backend/src/main.ts).
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI}
+      # Web session (requireEnv).
+      SESSION_SECRET: ${SESSION_SECRET}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS}
+      # CORS / SPA origin (requireEnv + config allowed_origins).
+      FRONTEND_URL: ${FRONTEND_URL}
+      # Config-file interpolation set (see top-of-file NOTE).
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
       LLM_API_KEY: ${LLM_API_KEY}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY}
       EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
+      ENRICHMENT_LLM_API_KEY: ${ENRICHMENT_LLM_API_KEY}
+      ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
     volumes:
       - ./Share2Brain.config.yml:/app/Share2Brain.config.yml:ro
+    networks:
+      - frontend
+      - data
     depends_on:
       migrator:
         condition: service_completed_successfully
@@ -83,13 +132,29 @@ services:
     build:
       context: .
       dockerfile: packages/bot/Dockerfile
-    env_file:
-      - .env
+    # M-12: bot = Discord bot token + guild + DB/Redis + the config set. It does
+    # NOT receive the OAuth client secret/redirect or SESSION_SECRET.
     environment:
       DATABASE_URL: postgres://share2brain:${POSTGRES_PASSWORD}@postgres:5432/share2brain
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Discord ingestion (requireEnv in bot/src/main.ts + config guild_id).
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      # Config-file interpolation set (see top-of-file NOTE) — required even
+      # though the bot does not call the LLM/embeddings itself.
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY}
+      EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
+      ENRICHMENT_LLM_API_KEY: ${ENRICHMENT_LLM_API_KEY}
+      ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
     volumes:
       - ./Share2Brain.config.yml:/app/Share2Brain.config.yml:ro
+    networks:
+      - data
     depends_on:
       migrator:
         condition: service_completed_successfully
@@ -105,19 +170,27 @@ services:
     build:
       context: .
       dockerfile: packages/workers/Dockerfile
-    env_file:
-      - .env
+    # M-12: workers = DB/Redis + embeddings/enrichment (its real consumers) + the
+    # rest of the config set. It does NOT receive any Discord bot/OAuth secret or
+    # SESSION_SECRET (DISCORD_GUILD_ID is not a secret; needed for config interp).
     environment:
       DATABASE_URL: postgres://share2brain:${POSTGRES_PASSWORD}@postgres:5432/share2brain
-      REDIS_URL: redis://redis:6379
-      # Embeddings (Indexer, Story 3.3). base_url only for "custom".
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Config-file interpolation set (see top-of-file NOTE).
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
       EMBEDDINGS_API_KEY: ${EMBEDDINGS_API_KEY}
       EMBEDDINGS_BASE_URL: ${EMBEDDINGS_BASE_URL:-}
-      # Enrichment LLM (Indexer, Epic 7 — title/description generation, Story 7.2). base_url only for "custom".
       ENRICHMENT_LLM_API_KEY: ${ENRICHMENT_LLM_API_KEY}
       ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
     volumes:
       - ./Share2Brain.config.yml:/app/Share2Brain.config.yml:ro
+    networks:
+      - data
     depends_on:
       migrator:
         condition: service_completed_successfully
@@ -135,6 +208,7 @@ services:
   # ── Edge: the only host-exposed service (AD-7) ──────────────────────────────
   # Built from packages/web/Dockerfile: the SPA dist + nginx.conf are baked into
   # nginx:1.27-alpine, so no separate web service or shared volume is needed.
+  # M-14: on `frontend` only — cannot reach postgres/redis directly.
   nginx:
     build:
       context: .
@@ -142,8 +216,24 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    volumes:
+      # M-11: operator supplies real TLS certs here to enable the :443 server in
+      # nginx.conf. The repo ships NO certs, so the HTTPS server stays commented
+      # out and `nginx -t` passes; provide ./certs/fullchain.pem + privkey.pem
+      # and uncomment that block to serve TLS. Read-only mount.
+      - ./certs:/etc/nginx/certs:ro
+    networks:
+      - frontend
     depends_on:
       - backend
 
+networks:
+  # M-14: split the former single flat network so the edge is isolated from the
+  # data tier. Only backend is on both.
+  frontend:
+  data:
+
 volumes:
   pgdata:
+  # M-14: Redis AOF durability (also fixes the previously-missing Redis volume).
+  redisdata:

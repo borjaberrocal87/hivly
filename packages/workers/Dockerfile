@@ -18,5 +18,10 @@ COPY tsconfig.base.json ./
 COPY packages/shared ./packages/shared
 COPY packages/workers ./packages/workers
 
+# M-13: drop root. node:*-alpine ships a built-in unprivileged `node` user (uid
+# 1000). All COPY'd sources and `npm ci` output are world-readable, so tsx can
+# still read /app at runtime; no chown needed.
+USER node
+
 # Run from /app so loadConfig() finds the mounted /app/Share2Brain.config.yml (cwd).
 CMD ["npx", "tsx", "packages/workers/src/main.ts"]

@@ -69,6 +69,12 @@ enrichment:
     user_agent: "Share2BrainBot/1.0"
     allowed_schemes: ["https"]
     block_private_ips: true   # SSRF mitigation (Story 7.2)
+  # OPTIONAL — throttle enrichment LLM calls so a burst of link-heavy messages
+  # can't run up cost / hit provider limits. Omit the whole block to disable.
+  rate_limit:
+    enabled: true
+    per_author_hourly: 20   # max enrichments triggered by one Discord author per hour
+    global_daily: 500       # max enrichments across the whole instance per day
 
 # --- Sync (edits/deletes from Discord) ---------------------------------------
 sync:
@@ -120,6 +126,10 @@ observability:
 
 # --- Security -----------------------------------------------------------------
 security:
+  # OPTIONAL — session cookie `Secure` attribute. Omit (or true) = cookie is
+  # only sent over HTTPS (the safe production default). Set false ONLY for local
+  # plain-HTTP dev, where a Secure cookie would never be stored by the browser.
+  # cookie_secure: true
   # Three independent tiers (Story 6.4, AC-2), each { window_ms, max_requests }.
   # Keyed per client IP (trust proxy 1, the single nginx hop). /health is never
   # rate-limited.
