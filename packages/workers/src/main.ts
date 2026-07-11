@@ -194,7 +194,7 @@ async function main(): Promise<void> {
   // ONCE here and injected through the pipeline — never a module-level
   // singleton `Agent` (AC-2), mirroring the embedder injection pattern.
   const enrichModel = createChatModel(config.enrichment.llm);
-  const guard = createGuardedDispatcher(config.enrichment.fetch);
+  const guard = createGuardedDispatcher(config.enrichment.fetch, undefined, logger);
 
   // AC-6: the Sync consumer runs concurrently with the Indexer, gated by
   // config.sync.enabled. Its two blocking loops each get their OWN Redis client

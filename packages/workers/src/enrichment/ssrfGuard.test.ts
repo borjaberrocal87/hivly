@@ -1,12 +1,18 @@
 import { BlockList } from 'node:net';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+import type { Logger } from '../logger.js';
 
 import {
   createDefaultBlockList,
   createGuardedDispatcher,
   isIpLiteralBlocked,
 } from './ssrfGuard.js';
+
+function makeLogger(): Logger {
+  return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+}
 
 const FETCH_CONFIG_GUARDED = {
   timeout_ms: 5000,
@@ -114,5 +120,57 @@ describe('createGuardedDispatcher', () => {
     const guard = createGuardedDispatcher(FETCH_CONFIG_GUARDED, customBlockList);
     expect(guard.isBlocked('169.254.169.254')).toBe(true);
     expect(guard.isBlocked('127.0.0.1')).toBe(false);
+  });
+
+  it('should warn loudly when the guard is disabled (never silent)', () => {
+    const logger = makeLogger();
+    createGuardedDispatcher(FETCH_CONFIG_UNGUARDED, undefined, logger);
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(vi.mocked(logger.warn).mock.calls[0][0]).toMatch(/SSRF guard DISABLED/);
+  });
+
+  it('should NOT warn when the guard is enabled', () => {
+    const logger = makeLogger();
+    createGuardedDispatcher(FETCH_CONFIG_GUARDED, undefined, logger);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+});
+
+// L-8: destination-port allowlist — allow only 443, plus 80 when http is a
+// configured scheme. The SSRF layers never checked the port before this.
+describe('GuardedDispatcher.isPortAllowed', () => {
+  it('should allow 443 (default https port)', () => {
+    const guard = createGuardedDispatcher(FETCH_CONFIG_GUARDED); // https only
+    expect(guard.isPortAllowed(new URL('https://example.com/'))).toBe(true);
+    expect(guard.isPortAllowed(new URL('https://example.com:443/'))).toBe(true);
+  });
+
+  it('should reject a non-allowlisted port', () => {
+    const guard = createGuardedDispatcher(FETCH_CONFIG_GUARDED);
+    expect(guard.isPortAllowed(new URL('https://example.com:8080/'))).toBe(false);
+    expect(guard.isPortAllowed(new URL('https://example.com:22/'))).toBe(false);
+  });
+
+  it('should reject port 80 when http is not a configured scheme', () => {
+    const guard = createGuardedDispatcher(FETCH_CONFIG_GUARDED); // https only
+    expect(guard.isPortAllowed(new URL('http://example.com/'))).toBe(false); // default 80
+    expect(guard.isPortAllowed(new URL('https://example.com:80/'))).toBe(false);
+  });
+
+  it('should allow port 80 only when http is a configured scheme', () => {
+    const httpConfig = {
+      ...FETCH_CONFIG_GUARDED,
+      allowed_schemes: ['http', 'https'] as ('http' | 'https')[],
+    };
+    const guard = createGuardedDispatcher(httpConfig);
+    expect(guard.isPortAllowed(new URL('http://example.com/'))).toBe(true); // default 80
+    expect(guard.isPortAllowed(new URL('http://example.com:80/'))).toBe(true);
+    expect(guard.isPortAllowed(new URL('https://example.com/'))).toBe(true); // 443 still allowed
+    expect(guard.isPortAllowed(new URL('http://example.com:8080/'))).toBe(false);
+  });
+
+  it('should allow any port when the guard is disabled (dev-only escape hatch)', () => {
+    const guard = createGuardedDispatcher(FETCH_CONFIG_UNGUARDED);
+    expect(guard.isPortAllowed(new URL('http://example.com:12345/'))).toBe(true);
   });
 });

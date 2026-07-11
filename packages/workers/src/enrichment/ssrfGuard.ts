@@ -21,6 +21,8 @@ import { Agent, type Dispatcher } from 'undici';
 
 import type { EnrichmentConfig } from '@share2brain/shared';
 
+import type { Logger } from '../logger.js';
+
 /** Raised by the Layer B custom lookup when a resolved address is blocked —
  *  distinguishable from a generic DNS/network failure by `fetchUrl`'s caller. */
 export class SsrfBlockedError extends Error {}
@@ -118,6 +120,35 @@ function createLookup(blockList: BlockList): ConnectLookupFunction {
   };
 }
 
+/**
+ * Default destination port for a URL that omits one (`URL#port` is `''`). Only
+ * `http:`/`https:` reach the guard — the scheme allowlist runs first.
+ */
+function defaultPortForScheme(protocol: string): number {
+  return protocol === 'http:' ? 80 : 443;
+}
+
+/**
+ * Destination-port allowlist (L-8). The SSRF layers validate scheme + resolved
+ * IP but never the port, so without this a public host on an arbitrary port
+ * (e.g. an internal service reverse-proxied to `:8080`) would be reachable.
+ * Allow only 443, plus 80 when `http` is a configured scheme.
+ */
+function isDestinationPortAllowed(url: URL, allowedPorts: ReadonlySet<number>): boolean {
+  const port = url.port === '' ? defaultPortForScheme(url.protocol) : Number(url.port);
+  return allowedPorts.has(port);
+}
+
+/** The shipped port allowlist: 443 always, plus 80 when `http` is a permitted
+ *  scheme. Derived from config; injectable override exists only for tests. */
+export function defaultAllowedPorts(
+  allowedSchemes: EnrichmentConfig['fetch']['allowed_schemes'],
+): Set<number> {
+  const ports = new Set<number>([443]);
+  if (allowedSchemes.includes('http')) ports.add(80);
+  return ports;
+}
+
 export interface GuardedDispatcher {
   /** Mirrors `fetchConfig.block_private_ips` — both layers are inert when false. */
   enabled: boolean;
@@ -127,20 +158,41 @@ export interface GuardedDispatcher {
   dispatcher: Dispatcher | undefined;
   /** Layer A check bound to this guard's BlockList; always `false` when disabled. */
   isBlocked(hostname: string): boolean;
+  /** Destination-port allowlist (L-8); always `true` when disabled (escape hatch). */
+  isPortAllowed(url: URL): boolean;
 }
 
 /**
  * Build the guarded dispatcher once at boot (`main.ts`) and inject it through
  * the pipeline — never a module-level singleton `Agent` (AC-6). `blockList` is
  * injectable so tests can exercise the per-hop redirect re-check (AC-8) with a
- * narrower range set than the shipped default.
+ * narrower range set than the shipped default. `logger` is optional so tests can
+ * omit it; boot passes the real one so a disabled guard is never silent (L-8).
+ * `allowedPorts` defaults to the config-derived allowlist; it is injectable for
+ * the same reason `blockList` is — so a test can exercise the per-hop redirect
+ * re-check against a server on an ephemeral (non-80/443) port.
  */
 export function createGuardedDispatcher(
   fetchConfig: EnrichmentConfig['fetch'],
   blockList: BlockList = createDefaultBlockList(),
+  logger?: Logger,
+  allowedPorts: ReadonlySet<number> = defaultAllowedPorts(fetchConfig.allowed_schemes),
 ): GuardedDispatcher {
   if (!fetchConfig.block_private_ips) {
-    return { enabled: false, dispatcher: undefined, isBlocked: () => false };
+    // `block_private_ips=false` is the single flag that disables BOTH SSRF
+    // layers — warn loudly and persistently so the operator can never run with
+    // the guard off unknowingly (L-8). Intended for local dev only.
+    logger?.warn(
+      'SSRF guard DISABLED (enrichment.fetch.block_private_ips=false): outbound ' +
+        'enrichment fetches may connect to ANY address, including private, loopback, ' +
+        'and cloud-metadata IPs. Intended for local dev only — never in production.',
+    );
+    return {
+      enabled: false,
+      dispatcher: undefined,
+      isBlocked: () => false,
+      isPortAllowed: () => true,
+    };
   }
 
   const dispatcher = new Agent({ connect: { lookup: createLookup(blockList) } });
@@ -148,5 +200,6 @@ export function createGuardedDispatcher(
     enabled: true,
     dispatcher,
     isBlocked: (hostname: string) => isIpLiteralBlocked(hostname, blockList),
+    isPortAllowed: (url: URL) => isDestinationPortAllowed(url, allowedPorts),
   };
 }
