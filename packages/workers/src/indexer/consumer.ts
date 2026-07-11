@@ -13,6 +13,7 @@ import { CONSUMER_GROUPS, STREAM_KEYS } from '@share2brain/shared/types/events';
 import type { EnrichmentChatModel } from '../enrichment/enrich.js';
 import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import type { Logger } from '../logger.js';
+import { DEFAULT_REAP_INTERVAL_MS, reapPoisonEntries } from '../streams/poisonReaper.js';
 import { indexBatch } from './indexBatch.js';
 import type { Embedder, RawStreamEntry } from './types.js';
 
@@ -31,6 +32,8 @@ export interface RunIndexerDeps {
   guard: GuardedDispatcher;
   /** Aborted on SIGTERM/SIGINT — the loop exits at the next iteration boundary. */
   signal: AbortSignal;
+  /** Poison-reap cadence override (tests). Defaults to DEFAULT_REAP_INTERVAL_MS. */
+  reapIntervalMs?: number;
 }
 
 /**
@@ -70,7 +73,28 @@ export async function runIndexer(deps: RunIndexerDeps): Promise<void> {
 
   // AC-1: live loop. xReadGroup returns null on BLOCK timeout — just loop and
   // re-check the abort flag. Checked at every top so shutdown stops within ~BLOCK_MS.
+  // Between reads, periodically reap the PEL: retry stale entries in-process and
+  // dead-letter poison ones so they can't pin the trimmer's floor forever (the
+  // boot replay above just walked the PEL, so the first reap can wait a full tick).
+  const reapIntervalMs = deps.reapIntervalMs ?? DEFAULT_REAP_INTERVAL_MS;
+  let nextReapAt = Date.now() + reapIntervalMs;
   while (!signal.aborted) {
+    if (Date.now() >= nextReapAt) {
+      nextReapAt = Date.now() + reapIntervalMs;
+      try {
+        const reclaimed = await reapPoisonEntries({ redis, stream, group, consumer: CONSUMER, logger });
+        if (reclaimed.length > 0) {
+          const retry = await indexBatch({ entries: reclaimed, db, embedder, config, logger, enrichModel, guard, signal });
+          for (const id of retry.ackIds) await redis.xAck(stream, group, id);
+        }
+      } catch (err) {
+        // Reaping is auxiliary — a Redis blip here must not kill the consumer.
+        logger.error('poison reap failed — will retry next tick', {
+          stream,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
     const res = await redis.xReadGroup(
       group,
       CONSUMER,

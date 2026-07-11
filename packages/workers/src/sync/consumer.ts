@@ -19,6 +19,7 @@ import type { EnrichmentChatModel } from '../enrichment/enrich.js';
 import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import type { Embedder, RawStreamEntry } from '../indexer/types.js';
 import type { Logger } from '../logger.js';
+import { DEFAULT_REAP_INTERVAL_MS, reapPoisonEntries } from '../streams/poisonReaper.js';
 import { parseDeletedEvent, parseUpdatedEvent } from './events.js';
 import { processDelete } from './processDelete.js';
 import { processUpdate } from './processUpdate.js';
@@ -44,6 +45,8 @@ export interface RunSyncDeps {
   guard: GuardedDispatcher;
   /** Aborted on SIGTERM/SIGINT — both loops exit at their next iteration boundary. */
   signal: AbortSignal;
+  /** Poison-reap cadence override (tests). Defaults to DEFAULT_REAP_INTERVAL_MS. */
+  reapIntervalMs?: number;
 }
 
 /**
@@ -52,7 +55,7 @@ export interface RunSyncDeps {
  * clients — a failure in one never affects the other.
  */
 export async function runSync(deps: RunSyncDeps): Promise<void> {
-  const { redisUpdated, redisDeleted, db, embedder, config, logger, enrichModel, guard, signal } = deps;
+  const { redisUpdated, redisDeleted, db, embedder, config, logger, enrichModel, guard, signal, reapIntervalMs } = deps;
   const group = CONSUMER_GROUPS.SYNC;
   const updatedStream = STREAM_KEYS.DISCORD_MESSAGES_UPDATED;
   const deletedStream = STREAM_KEYS.DISCORD_MESSAGES_DELETED;
@@ -64,6 +67,7 @@ export async function runSync(deps: RunSyncDeps): Promise<void> {
       stream: updatedStream,
       logger,
       signal,
+      reapIntervalMs,
       handle: (entry) => {
         const event = entry.message == null ? null : parseUpdatedEvent(entry.message);
         if (event === null) {
@@ -93,6 +97,7 @@ export async function runSync(deps: RunSyncDeps): Promise<void> {
       stream: deletedStream,
       logger,
       signal,
+      reapIntervalMs,
       handle: (entry) => {
         const event = entry.message == null ? null : parseDeletedEvent(entry.message);
         if (event === null) {
@@ -115,6 +120,7 @@ interface RunStreamLoopDeps {
   logger: Logger;
   signal: AbortSignal;
   handle: (entry: RawStreamEntry) => Promise<ProcessResult>;
+  reapIntervalMs?: number;
 }
 
 /** One stream's idempotent-group-create + PEL-replay + live-read loop — the
@@ -146,8 +152,28 @@ async function runStreamLoop(deps: RunStreamLoopDeps): Promise<void> {
 
   // AC-6: live loop. xReadGroup returns null on BLOCK timeout — loop and
   // re-check the abort flag, checked at every top so shutdown stops within
-  // ~BLOCK_MS.
+  // ~BLOCK_MS. Between reads, periodically reap the PEL: retry stale entries
+  // in-process and dead-letter poison ones so they can't pin the trimmer's
+  // floor forever (the boot replay above just walked the PEL, so the first
+  // reap can wait a full tick).
+  const reapIntervalMs = deps.reapIntervalMs ?? DEFAULT_REAP_INTERVAL_MS;
+  let nextReapAt = Date.now() + reapIntervalMs;
   while (!signal.aborted) {
+    if (Date.now() >= nextReapAt) {
+      nextReapAt = Date.now() + reapIntervalMs;
+      try {
+        const reclaimed = await reapPoisonEntries({ redis, stream, group, consumer: CONSUMER, logger });
+        if (reclaimed.length > 0) {
+          await processEntries({ entries: reclaimed, stream, group, redis, handle, logger });
+        }
+      } catch (err) {
+        // Reaping is auxiliary — a Redis blip here must not kill the consumer.
+        logger.error('poison reap failed — will retry next tick', {
+          stream,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
     const res = await redis.xReadGroup(
       group,
       CONSUMER,
