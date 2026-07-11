@@ -8,6 +8,8 @@ import {
   type AuthMeResponse,
 } from '@share2brain/shared/schemas';
 
+import { CSRF_HEADER } from './csrf';
+
 /** Full-page navigation target to start the Discord OAuth2 login (AC6). */
 export const LOGIN_URL = '/api/auth/login';
 
@@ -24,7 +26,11 @@ export async function fetchMe(): Promise<AuthMeResponse | null> {
 
 /** End the session server-side (deletes the Redis session key). */
 export async function logout(): Promise<void> {
-  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  await fetch('/api/auth/logout', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { ...CSRF_HEADER },
+  });
 }
 
 /**
@@ -41,7 +47,11 @@ export async function fetchGuestAvailability(): Promise<boolean> {
 
 /** Create a guest session and resolve the guest profile (Story 2.5, AC6). */
 export async function loginAsGuest(): Promise<AuthMeResponse> {
-  const res = await fetch('/api/auth/guest', { method: 'POST', credentials: 'include' });
+  const res = await fetch('/api/auth/guest', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { ...CSRF_HEADER },
+  });
   if (!res.ok) throw new Error(`POST /api/auth/guest failed: ${res.status}`);
   return AuthMeResponseSchema.parse(await res.json());
 }

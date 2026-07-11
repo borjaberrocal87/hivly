@@ -8,6 +8,8 @@
 // or /db, which pull `pg` into the bundle (ESLint no-restricted-imports, AD-3).
 import { SSEFrameSchema, type SSEFrame, type ChatRequest } from '@share2brain/shared/schemas';
 
+import { CSRF_HEADER } from './csrf';
+
 /** Thrown on a PRE-stream failure: the endpoint returned `{ error, code }` JSON
  * (400/404/500) instead of a stream. Carries the stable `code` + HTTP status so
  * the caller can render an inline error without re-reading the body as a stream. */
@@ -34,7 +36,7 @@ export async function* streamChat(
   const res = await fetch('/api/chat', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...CSRF_HEADER, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   });
@@ -70,8 +72,18 @@ export async function* streamChat(
       const raw = buffer.slice(0, sep).trim(); // "data: {...}"
       buffer = buffer.slice(sep + 2);
       if (!raw.startsWith('data:')) continue;
-      const json: unknown = JSON.parse(raw.slice(raw.indexOf(':') + 1).trim());
-      yield SSEFrameSchema.parse(json);
+      // Parse each frame defensively (L-11). A single corrupt/invalid frame must
+      // NOT tear down the stream and discard the valid tokens already emitted, so
+      // skip it and keep reading — but warn (dev signal) rather than swallow.
+      let frame: SSEFrame;
+      try {
+        const json: unknown = JSON.parse(raw.slice(raw.indexOf(':') + 1).trim());
+        frame = SSEFrameSchema.parse(json);
+      } catch (err) {
+        console.warn('[chat] skipping malformed SSE frame', err);
+        continue;
+      }
+      yield frame;
     }
   }
 }
