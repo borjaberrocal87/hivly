@@ -82,7 +82,7 @@ describe('Guest access endpoints (integration)', () => {
 
   /** Establish a guest session on the agent via POST /api/auth/guest. */
   async function guestLogin(agent: ReturnType<typeof request.agent>): Promise<void> {
-    const res = await agent.post('/api/auth/guest');
+    const res = await agent.post('/api/auth/guest').set('X-Requested-With', 'share2brain');
     expect(res.status).toBe(200);
   }
 
@@ -113,7 +113,7 @@ describe('Guest access endpoints (integration)', () => {
     expect(get.status).toBe(404);
     expect(get.body).toEqual({ error: 'Not found', code: 'GUEST_ACCESS_DISABLED' });
 
-    const post = await request(app).post('/api/auth/guest');
+    const post = await request(app).post('/api/auth/guest').set('X-Requested-With', 'share2brain');
     expect(post.status).toBe(404);
     expect(post.body.code).toBe('GUEST_ACCESS_DISABLED');
   });
@@ -127,7 +127,7 @@ describe('Guest access endpoints (integration)', () => {
     expect(availability.status).toBe(200);
     expect(availability.body).toEqual({ enabled: true });
 
-    const res = await agent.post('/api/auth/guest');
+    const res = await agent.post('/api/auth/guest').set('X-Requested-With', 'share2brain');
     expect(res.status).toBe(200);
     expect(res.body.isGuest).toBe(true);
     expect(res.body.id).toBe(guestUserId);
@@ -189,7 +189,7 @@ describe('Guest access endpoints (integration)', () => {
     const agent = request.agent(enabledApp());
     await guestLogin(agent);
 
-    const chat = await agent.post('/api/chat').send({ message: 'hola desde la demo' });
+    const chat = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'hola desde la demo' });
     expect(chat.status).toBe(200);
 
     const rows = await clients.db.execute(
@@ -205,7 +205,7 @@ describe('Guest access endpoints (integration)', () => {
     const agent = request.agent(enabledApp());
     await guestLogin(agent);
 
-    const chat = await agent.post('/api/chat').send({ message: 'demo isolation probe' });
+    const chat = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'demo isolation probe' });
     expect(chat.status).toBe(200);
 
     // The conversation exists in the DB under the shared guest id …
@@ -236,7 +236,7 @@ describe('Guest access endpoints (integration)', () => {
     await guestLogin(agentA);
 
     // First turn (no id) → new conversation; its id comes back in the done frame.
-    const first = await agentA.post('/api/chat').send({ message: 'guest turn 1' });
+    const first = await agentA.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'guest turn 1' });
     expect(first.status).toBe(200);
     const convId = (parseFrames(first.text).at(-1) as Extract<SSEFrame, { type: 'done' }>)
       .conversationId;
@@ -244,7 +244,7 @@ describe('Guest access endpoints (integration)', () => {
 
     // Same session, same id → resumes (multi-turn preserved via the allowlist).
     const second = await agentA
-      .post('/api/chat')
+      .post('/api/chat').set('X-Requested-With', 'share2brain')
       .send({ message: 'guest turn 2', conversationId: convId });
     expect(second.status).toBe(200);
     expect((parseFrames(second.text).at(-1) as Extract<SSEFrame, { type: 'done' }>).conversationId).toBe(
@@ -255,7 +255,7 @@ describe('Guest access endpoints (integration)', () => {
     const agentB = request.agent(enabledApp());
     await guestLogin(agentB);
     const cross = await agentB
-      .post('/api/chat')
+      .post('/api/chat').set('X-Requested-With', 'share2brain')
       .send({ message: 'steal', conversationId: convId });
     expect(cross.status).toBe(404);
     expect(cross.body.code).toBe('NOT_FOUND');
@@ -269,7 +269,7 @@ describe('Guest access endpoints (integration)', () => {
     const agent = request.agent(enabledApp());
     await guestLogin(agent);
     // Guarantee at least one persisted user-message under the sentinel this run.
-    await agent.post('/api/chat').send({ message: 'stats probe' });
+    await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'stats probe' });
 
     const stats = await agent.get('/api/stats');
     expect(stats.status).toBe(200);
@@ -280,7 +280,7 @@ describe('Guest access endpoints (integration)', () => {
     expect(stats.body.coverage.readCount).toBe(0);
 
     // Guest markAll is ephemeral → nothing persisted, markedCount 0.
-    const markAll = await agent.post('/api/read-status/mark-all').send({});
+    const markAll = await agent.post('/api/read-status/mark-all').set('X-Requested-With', 'share2brain').send({});
     expect(markAll.status).toBe(200);
     expect(markAll.body.markedCount).toBe(0);
   });

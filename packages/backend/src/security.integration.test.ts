@@ -8,7 +8,7 @@
 // Requires infra:  docker compose up -d postgres redis
 // Run:             npm run test:integration
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createApp, type AppOptions } from './app.js';
 import { buildTestAppOptions, openTestClients, type TestClients } from './test-helpers.js';
@@ -55,6 +55,17 @@ describe('Security hardening (integration)', () => {
   });
 
   describe('rate limiting — injected (production shape)', () => {
+    // L-1 (audit): the limiters now use a Redis-backed store (rate-limit-redis)
+    // instead of a per-process MemoryStore, so hit counters PERSIST in Redis (with
+    // the window's TTL) and are shared across every app instance and test run. Flush
+    // the `rl:*` keys before each case so each test starts from a clean budget —
+    // otherwise counts bleed between the tiers/tests and across re-runs within the
+    // 60s window, making the first request spuriously 429.
+    beforeEach(async () => {
+      const keys = await clients.redis.keys('rl:*');
+      if (keys.length > 0) await clients.redis.del(keys);
+    });
+
     it('returns 429 with RateLimit headers past the auth tier limit', async () => {
       const app = createApp(
         clients.db,
@@ -122,7 +133,7 @@ describe('Security hardening (integration)', () => {
         expect(res.status).not.toBe(429);
       }
       for (let i = 0; i < 5; i++) {
-        const res = await request(app).post('/api/chat').send({ message: 'hi' });
+        const res = await request(app).post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'hi' });
         expect(res.status).not.toBe(429);
       }
     });

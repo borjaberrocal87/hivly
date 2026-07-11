@@ -64,10 +64,18 @@ export function createChatController(deps: { chatService: ChatService }): ChatCo
       if (isGuest && !parsed.data.conversationId) {
         // Fresh array (never mutate the one handed to resolveConversation as
         // guestScope) so the allowlist snapshot and the session state stay distinct.
+        //
+        // L-5 (audit): cap the retained ids to the most recent 50 so the list can't
+        // grow without bound over the guest session's TTL. The read-modify-write here
+        // is a lost-update race (two concurrent turns in one session could each read
+        // the pre-append array and the last save wins, dropping the other's id). That
+        // is a fail-CLOSED loss of resumability only — a guest may lose the ability to
+        // resume one just-started conversation, never a security/ownership escalation —
+        // so last-write-wins is acceptable and we do not serialize on the session here.
         req.session.guestConversationIds = [
           ...(req.session.guestConversationIds ?? []),
           conversation.id,
-        ];
+        ].slice(-50);
         await new Promise<void>((resolve) => {
           req.session.save((err: unknown) => {
             if (err) {

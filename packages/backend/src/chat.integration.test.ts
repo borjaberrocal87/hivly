@@ -125,7 +125,7 @@ describe('POST /api/chat (integration)', () => {
   it('should 401 without a session (generic /api gate)', async () => {
     const app = createApp(clients.db, clients.redis, buildTestAppOptions());
 
-    const res = await request(app).post('/api/chat').send({ message: 'hello' });
+    const res = await request(app).post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'hello' });
 
     expect(res.status).toBe(401);
     expect(res.body.code).toBe('AUTH_REQUIRED');
@@ -139,7 +139,7 @@ describe('POST /api/chat (integration)', () => {
     const agent = request.agent(app);
     await login(agent, 'code-chat-a-blank');
 
-    const res = await agent.post('/api/chat').send({ message: '   ' });
+    const res = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: '   ' });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Mensaje inválido', code: 'VALIDATION_ERROR' });
@@ -153,7 +153,7 @@ describe('POST /api/chat (integration)', () => {
     const agent = request.agent(app);
     await login(agent, 'code-chat-a-oversized');
 
-    const res = await agent.post('/api/chat').send({ message: 'a'.repeat(4001) });
+    const res = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'a'.repeat(4001) });
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Mensaje inválido', code: 'VALIDATION_ERROR' });
@@ -170,7 +170,7 @@ describe('POST /api/chat (integration)', () => {
       const agent = request.agent(app);
       await login(agent, 'code-chat-a-new');
 
-      const res = await agent.post('/api/chat').send({ message: 'what is the answer?' });
+      const res = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'what is the answer?' });
 
       expect(res.status).toBe(200);
       expect(res.headers['content-type']).toContain('text/event-stream');
@@ -226,11 +226,11 @@ describe('POST /api/chat (integration)', () => {
     const agent = request.agent(app);
     await login(agent, 'code-chat-a-append');
 
-    const first = await agent.post('/api/chat').send({ message: 'first turn' });
+    const first = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'first turn' });
     const firstDone = parseFrames(first.text).at(-1) as Extract<SSEFrame, { type: 'done' }>;
     const conversationId = firstDone.conversationId;
 
-    const second = await agent.post('/api/chat').send({ message: 'second turn', conversationId });
+    const second = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'second turn', conversationId });
     expect(second.status).toBe(200);
     const secondDone = parseFrames(second.text).at(-1) as Extract<SSEFrame, { type: 'done' }>;
     expect(secondDone.conversationId).toBe(conversationId);
@@ -248,7 +248,7 @@ describe('POST /api/chat (integration)', () => {
     });
     const agentB = request.agent(appB);
     await login(agentB, 'code-chat-b-owned');
-    const ownedByB = await agentB.post('/api/chat').send({ message: 'owned by B' });
+    const ownedByB = await agentB.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'owned by B' });
     const bConversationId = (parseFrames(ownedByB.text).at(-1) as Extract<SSEFrame, { type: 'done' }>)
       .conversationId;
 
@@ -259,7 +259,7 @@ describe('POST /api/chat (integration)', () => {
     const agentA = request.agent(appA);
     await login(agentA, 'code-chat-a-crossaccess');
 
-    const res = await agentA.post('/api/chat').send({ message: 'hi', conversationId: bConversationId });
+    const res = await agentA.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'hi', conversationId: bConversationId });
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Conversación no encontrada', code: 'NOT_FOUND' });
@@ -274,7 +274,7 @@ describe('POST /api/chat (integration)', () => {
     await login(agent, 'code-chat-a-unknown');
 
     const res = await agent
-      .post('/api/chat')
+      .post('/api/chat').set('X-Requested-With', 'share2brain')
       .send({ message: 'hi', conversationId: '00000000-0000-0000-0000-000000000000' });
 
     expect(res.status).toBe(404);
