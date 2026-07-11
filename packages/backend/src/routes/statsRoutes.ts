@@ -5,9 +5,10 @@
 import { Router } from 'express';
 
 import type { StatsController } from '../presentation/controllers/statsController.js';
+import { asyncHandler } from './asyncHandler.js';
 
 export function createStatsRouter(controller: StatsController): Router {
   const router = Router();
-  router.get('/', (req, res) => void controller.get(req, res));
+  router.get('/', asyncHandler((req, res) => controller.get(req, res)));
   return router;
 }

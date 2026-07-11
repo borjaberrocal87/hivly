@@ -6,10 +6,11 @@
 import { Router } from 'express';
 
 import type { ConversationController } from '../presentation/controllers/conversationController.js';
+import { asyncHandler } from './asyncHandler.js';
 
 export function createConversationRouter(controller: ConversationController): Router {
   const router = Router();
-  router.get('/', (req, res) => void controller.list(req, res));
-  router.get('/:conversationId', (req, res) => void controller.getById(req, res));
+  router.get('/', asyncHandler((req, res) => controller.list(req, res)));
+  router.get('/:conversationId', asyncHandler((req, res) => controller.getById(req, res)));
   return router;
 }

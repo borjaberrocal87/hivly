@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ChatModel, ChatTurn } from '../domain/repositories/chatModel.js';
-import { COMPRESSION_TOKEN_BUDGET, compressIfNeeded, estimateTokens } from './compress.js';
+import {
+  COMPRESSION_TOKEN_BUDGET,
+  CONVERSATION_SUMMARY_MARKER,
+  compressIfNeeded,
+  estimateTokens,
+} from './compress.js';
 
 /** A chat model that records how many times it was streamed and yields a fixed
  * summary. Lets tests assert whether summarization ran. */
@@ -61,10 +66,10 @@ describe('compressIfNeeded', () => {
 
     const result = await compressIfNeeded(messages, model, COMPRESSION_TOKEN_BUDGET);
 
-    // First message is the ephemeral system summary.
+    // First message is the ephemeral summary, marked as UNTRUSTED derived data (M-1).
     expect(result[0].role).toBe('system');
     expect(result[0].content).toContain('the compressed summary');
-    expect(result[0].content.startsWith('<conversation summary>')).toBe(true);
+    expect(result[0].content.startsWith(CONVERSATION_SUMMARY_MARKER)).toBe(true);
     // The most-recent turns are preserved verbatim as the tail.
     expect(result.at(-1)).toEqual(messages.at(-1));
     // Compression actually shrank the set (summary + tail < original count).

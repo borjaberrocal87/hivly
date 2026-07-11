@@ -5,9 +5,10 @@
 import { Router } from 'express';
 
 import type { DocumentController } from '../presentation/controllers/documentController.js';
+import { asyncHandler } from './asyncHandler.js';
 
 export function createDocumentRouter(controller: DocumentController): Router {
   const router = Router();
-  router.get('/', (req, res) => void controller.list(req, res));
+  router.get('/', asyncHandler((req, res) => controller.list(req, res)));
   return router;
 }

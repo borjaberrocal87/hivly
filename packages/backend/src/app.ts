@@ -45,6 +45,7 @@ import { createReadStatusController } from './presentation/controllers/readStatu
 import { createSearchController } from './presentation/controllers/searchController.js';
 import { createStatsController } from './presentation/controllers/statsController.js';
 import { createAuthRouter } from './routes/authRoutes.js';
+import { createErrorHandler } from './routes/errorHandler.js';
 import { createChannelsRouter } from './routes/channelsRoutes.js';
 import { createChatRouter } from './routes/chatRoutes.js';
 import { createConversationRouter } from './routes/conversationRoutes.js';
@@ -282,6 +283,13 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
   const conversationService = createConversationService({ conversationRepo });
   const conversationController = createConversationController({ conversationService });
   app.use('/api/conversations', createConversationRouter(conversationController));
+
+  // M-3 (audit): final error-handling middleware — the LAST app.use, so it is the
+  // net for everything above it (asyncHandler-forwarded controller rejections AND
+  // sync throws in earlier middleware, e.g. express.json()'s malformed-JSON error).
+  // Logs via the injected logger when present, else console.error; its
+  // res.headersSent guard makes it a no-op for an SSE response already streaming.
+  app.use(createErrorHandler(opts.logger));
 
   return app;
 }
