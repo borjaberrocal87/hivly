@@ -43,9 +43,11 @@ docker compose ps -a       # verify: postgres, redis, bot, workers, backend, ngi
 ```
 
 Open `http://localhost` — nginx is the single public entry point (port 80; to
-enable HTTPS, provide your own certs in `certs/` and uncomment the 443 server
-block in `nginx.conf`). Note: postgres also binds `127.0.0.1:5432` for local
-tooling, so free that port or stop any local PostgreSQL first.
+enable HTTPS, provide your own certs in `certs/`, uncomment the 443 server
+block in `nginx.conf`, and rebuild — `docker compose build nginx && docker
+compose up -d nginx` — since the config is baked into the image). Note:
+postgres also binds `127.0.0.1:5432` for local tooling, so free that port or
+stop any local PostgreSQL first.
 
 You will need:
 

@@ -26,7 +26,8 @@ The Share2Brain MVP feature set, ahead of the first tagged release.
   with sidebar badge.
 - **Knowledge stats** — RBAC-scoped analytics view (activity, coverage, top
   users).
-- **Notifications** — optional Telegram/Slack notifications.
+- **Notifications** — optional Slack notifications (Telegram support is
+  implemented in code; its Docker Compose wiring is still pending).
 - **UI internationalization** — Spanish and English, selected via
   `ui.language` and served from `/api/ui-config`.
 - **Deployment** — 7-service Docker Compose stack (nginx as the single public

@@ -14,7 +14,8 @@ describing your use case.
 - Discord OAuth2 login, Redis-backed sessions, optional guest demo access
 - Per-member read tracking with unread badges
 - Knowledge stats view (activity, read coverage, top contributors)
-- Optional Telegram/Slack notifications
+- Optional Slack notifications (Telegram is implemented in code; Docker
+  Compose wiring pending — see the reliability items below)
 - UI in Spanish and English (`ui.language`)
 - Single-command deployment: 7-service Docker Compose stack
 
@@ -41,8 +42,9 @@ Ideas we want, pending design work — feedback especially welcome:
   steps, tool calls, and why each source was selected.
 - **More UI languages** — the UI is fully translation-ready (Spanish and
   English today). A new locale needs a `locales/<lang>.json` in `packages/web`
-  plus registering the language code in the shared config schema and the i18n
-  setup. Contributions welcome.
+  plus registering the language code wherever the existing `es`/`en` pair is
+  wired (shared config + UI-config schemas, the web i18n setup, and the locale
+  parity test). Contributions welcome.
 - **Additional ingestion sources** — the pipeline is event-driven and
   source-agnostic by design; Discord is the first adapter.
 
