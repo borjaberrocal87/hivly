@@ -12,3 +12,4 @@ export * from './readStatus.js';
 export * from './search.js';
 export * from './sse.js';
 export * from './stats.js';
+export * from './uiConfig.js';
