@@ -1,13 +1,30 @@
 import type { Share2BrainConfig } from '@share2brain/shared';
 import type { Database } from '@share2brain/shared/db';
+import type { RedisClient } from '@share2brain/shared/redis';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { enrich } from '../enrichment/enrich.js';
+import type { ResolvedEnrichmentRateLimit } from '../enrichment/rateLimiter.js';
 import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import { fetchUrl } from '../enrichment/urlFetcher.js';
 import type { Logger } from '../logger.js';
 import { indexBatch } from './indexBatch.js';
 import type { Embedder, IndexStateRow, RawStreamEntry } from './types.js';
+
+/** Minimal fake node-redis client exposing just the two commands the budget
+ *  limiter uses. `incrValue` fixes the count INCR returns, so a test can put an
+ *  author at/over cap deterministically. */
+function makeFakeRedis(incrValue = 1) {
+  const incr = vi.fn(async () => incrValue);
+  const expire = vi.fn(async () => true);
+  return { redis: { incr, expire } as unknown as RedisClient, incr, expire };
+}
+
+const ENABLED_RATE_LIMIT: ResolvedEnrichmentRateLimit = {
+  enabled: true,
+  perAuthorHourly: 100,
+  globalDaily: 1000,
+};
 
 vi.mock('../enrichment/urlFetcher.js', () => ({ fetchUrl: vi.fn() }));
 vi.mock('../enrichment/enrich.js', async () => {
@@ -75,11 +92,34 @@ function extractStampedIds(condition: unknown): string[] {
   return (paramArray ?? []).map((param) => param.value);
 }
 
+/** Flatten a drizzle `sql` tagged-template into its literal text (params inlined)
+ *  so the fake tx can recognize the M-4 liveness `SELECT … FOR UPDATE` and read
+ *  the message id it locks. Mirrors the helper in processUpdate.test.ts. */
+function sqlText(q: unknown): string {
+  const chunks = (q as { queryChunks: unknown[] }).queryChunks;
+  return chunks
+    .map((c) => {
+      if (c !== null && typeof c === 'object' && 'queryChunks' in c) return sqlText(c);
+      if (c !== null && typeof c === 'object' && 'value' in (c as { value: unknown })) {
+        const v = (c as { value: unknown }).value;
+        return Array.isArray(v) ? v.join('') : String(v);
+      }
+      return String(c);
+    })
+    .join('');
+}
+
 /** A fake Drizzle db: `select…where` yields the given dedup rows; `transaction`
  *  records inserts and stamps whichever message id the stamp's `where(inArray(...))`
  *  condition names (minus `stampMiss`, to model a RETURNING miss). Works whether
  *  the message inserted zero rows (discard) or several (resource rows). */
-function makeFakeDb(dedupRows: IndexStateRow[], stampMiss = new Set<string>()) {
+function makeFakeDb(
+  dedupRows: IndexStateRow[],
+  stampMiss = new Set<string>(),
+  // M-4: message ids that a concurrent delete purges mid-flight — the in-tx
+  // `SELECT … FOR UPDATE` liveness check finds no row for them.
+  deletedMidFlight = new Set<string>(),
+) {
   const inserted: InsertedRow[] = [];
   let transactionCount = 0;
 
@@ -88,6 +128,13 @@ function makeFakeDb(dedupRows: IndexStateRow[], stampMiss = new Set<string>()) {
     transaction: async (cb: (tx: unknown) => Promise<boolean>) => {
       transactionCount++;
       const tx = {
+        execute: (q: unknown) => {
+          // Only the M-4 liveness re-check runs through `tx.execute`. It returns
+          // a row unless this message was deleted mid-flight (delete won).
+          const text = sqlText(q);
+          const deleted = [...deletedMidFlight].some((id) => text.includes(`id = ${id} `));
+          return Promise.resolve({ rows: deleted ? [] : [{ ok: 1 }] });
+        },
         insert: () => ({
           values: (v: InsertedRow) => {
             inserted.push(v);
@@ -543,6 +590,108 @@ describe('indexBatch', () => {
     });
 
     expect(ackIds).toEqual(['s1']);
+  });
+
+  it('should abort persistence as a no-op but still ack when the message is hard-deleted mid-index (M-4)', async () => {
+    const logger = makeLogger();
+    // Row exists at dedup time (indexed_at null → toProcess), but a concurrent
+    // hard delete removes it before the persist tx: the in-tx FOR UPDATE
+    // liveness check finds nothing, so no embeddings are resurrected — and the
+    // entry is still acked (the delete won the race).
+    const { db, inserted } = makeFakeDb([{ id: 'm1', indexedAt: null }], new Set(), new Set(['m1']));
+
+    const { ackIds } = await indexBatch({
+      entries: [raw('s1', { content: 'https://a.com' })],
+      db,
+      embedder,
+      config,
+      logger,
+      enrichModel,
+      guard,
+      signal: neverAbortedSignal(),
+    });
+
+    expect(ackIds).toEqual(['s1']); // acked no-op
+    expect(inserted).toHaveLength(0); // nothing resurrected
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('deleted mid-index'),
+      expect.objectContaining({ messageId: 'm1' }),
+    );
+  });
+
+  it('should degrade to no-URL indexing (no fetch, still stamp+ack) when the author budget is exceeded (M-5)', async () => {
+    const logger = makeLogger();
+    const { db, inserted } = makeFakeDb([{ id: 'm1', indexedAt: null }]);
+    const { redis, incr } = makeFakeRedis(101); // 101 > perAuthorHourly (100) → deny
+
+    const { ackIds } = await indexBatch({
+      entries: [raw('s1', { content: 'https://a.com', authorId: 'spammer' })],
+      db,
+      embedder,
+      config,
+      logger,
+      enrichModel,
+      guard,
+      signal: neverAbortedSignal(),
+      redis,
+      rateLimit: ENABLED_RATE_LIMIT,
+    });
+
+    expect(ackIds).toEqual(['s1']); // message NOT dropped — indexed with zero rows
+    expect(inserted).toHaveLength(0);
+    expect(fetchUrl).not.toHaveBeenCalled(); // no paid fetch/LLM on the URLs
+    expect(incr).toHaveBeenCalled(); // budget was consulted
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining('degrading message to no-URL indexing'),
+      expect.objectContaining({ messageId: 'm1', authorId: 'spammer' }),
+    );
+  });
+
+  it('should perform full enrichment when the budget allows it (M-5)', async () => {
+    const logger = makeLogger();
+    const { db, inserted } = makeFakeDb([{ id: 'm1', indexedAt: null }]);
+    const { redis } = makeFakeRedis(1); // well under cap → allowed
+
+    const { ackIds } = await indexBatch({
+      entries: [raw('s1', { content: 'https://a.com', authorId: 'a1' })],
+      db,
+      embedder,
+      config,
+      logger,
+      enrichModel,
+      guard,
+      signal: neverAbortedSignal(),
+      redis,
+      rateLimit: ENABLED_RATE_LIMIT,
+    });
+
+    expect(ackIds).toEqual(['s1']);
+    expect(fetchUrl).toHaveBeenCalledTimes(1);
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0].link).toBe('https://a.com/');
+  });
+
+  it('should not consult the budget for a no-URL message (M-5)', async () => {
+    const logger = makeLogger();
+    const { db, inserted } = makeFakeDb([{ id: 'm1', indexedAt: null }]);
+    const { redis, incr } = makeFakeRedis(1);
+
+    const { ackIds } = await indexBatch({
+      entries: [raw('s1', { content: 'just chatting, no links', authorId: 'a1' })],
+      db,
+      embedder,
+      config,
+      logger,
+      enrichModel,
+      guard,
+      signal: neverAbortedSignal(),
+      redis,
+      rateLimit: ENABLED_RATE_LIMIT,
+    });
+
+    expect(ackIds).toEqual(['s1']);
+    expect(inserted).toHaveLength(0);
+    expect(incr).not.toHaveBeenCalled(); // a costless message never burns budget
   });
 
   it('should bail the batch and leave every entry un-ACKed when already aborted', async () => {

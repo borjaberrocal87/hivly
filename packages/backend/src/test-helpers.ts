@@ -41,11 +41,23 @@ export function fakeChatModel(tokens: string[] = ['Hola', ' desde', ' Share2Brai
   };
 }
 
-// Dev defaults match the ports docker-compose exposes on localhost. Override via env
-// (e.g. CI): DATABASE_URL / REDIS_URL. Password matches the compose `.env` placeholder.
-const DATABASE_URL =
-  process.env.DATABASE_URL ?? 'postgres://share2brain:changeme@127.0.0.1:5432/share2brain';
-const REDIS_URL = process.env.REDIS_URL ?? 'redis://127.0.0.1:6379';
+// L-6 (audit): require the connection strings explicitly — NO `changeme` fallback.
+// A hardcoded default password is a fail-open footgun: it lets a misconfigured run
+// silently connect to (or lock out of) a real database with a well-known credential.
+// Resolved lazily inside openTestClients so importing this module for its pure
+// helpers (buildTestAppOptions/fakeChatModel/fakeQueryEmbedder) never throws.
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value || value.trim() === '') {
+    throw new Error(
+      `[integration] ${name} is required but not set. Export it (e.g. ` +
+        `DATABASE_URL=postgres://share2brain:<password>@127.0.0.1:5432/share2brain, ` +
+        `REDIS_URL=redis://127.0.0.1:6379) before running the integration suite. ` +
+        `There is no default fallback (audit L-6).`,
+    );
+  }
+  return value;
+}
 
 export interface TestClients {
   db: Database;
@@ -107,7 +119,7 @@ async function assertNoCompetingWriter(db: Database): Promise<void> {
 
 /** Open real DB + Redis clients (connected) for an integration test. */
 export async function openTestClients(): Promise<TestClients> {
-  const db = createDatabase(DATABASE_URL);
+  const db = createDatabase(requireEnv('DATABASE_URL'));
   // Run the guard FIRST — it needs only `db`. On throw, end the pool so we don't
   // leak it (Redis isn't connected yet, and `clients` is never assigned so a
   // beforeAll failure can't reach afterAll's close()).
@@ -117,7 +129,7 @@ export async function openTestClients(): Promise<TestClients> {
     await db.$client.end().catch(() => undefined);
     throw err;
   }
-  const redis = createRedisClient(REDIS_URL);
+  const redis = createRedisClient(requireEnv('REDIS_URL'));
   await redis.connect();
 
   return {

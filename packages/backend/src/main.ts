@@ -117,7 +117,12 @@ async function main(): Promise<void> {
   const app = createApp(db, redis, {
     sessionSecret,
     sessionTtlDays,
-    cookieSecure: process.env.NODE_ENV === 'production',
+    // M-2 (audit): source the cookie Secure flag from behavior config and FAIL
+    // CLOSED — an omitted `security.cookie_secure` is treated as `true` (secure).
+    // The old `NODE_ENV === 'production'` derivation failed OPEN: with NODE_ENV
+    // unset it silently shipped the `sid` cookie over plaintext HTTP. Dev sets
+    // `cookie_secure: false` explicitly to allow http://localhost.
+    cookieSecure: config.security.cookie_secure ?? true,
     discord: {
       clientId: discordClientId,
       clientSecret: discordClientSecret,

@@ -18,6 +18,12 @@ declare module 'express-session' {
     // Story 2.5: set `true` on guest sessions created via POST /api/auth/guest.
     // The payload is otherwise identical — still a real Redis session with TTL.
     isGuest?: boolean;
+    // L-3 (audit): ABSOLUTE guest expiry (epoch ms), set at guest-login time to
+    // `now + sessionTtlMinutes`. The cookie/store TTL is SLIDING (store.touch()
+    // renews it every request), so an active guest would never expire; requireAuth
+    // rejects+destroys a guest session once Date.now() > guestExpiresAt. Set only
+    // on guest sessions; OAuth sessions leave it undefined and are unaffected.
+    guestExpiresAt?: number;
     // Story 2.5 (review): the conversation ids created BY THIS guest session. All
     // guests share one sentinel `userId`, so DB ownership can't tell one guest's
     // conversation from another's — this per-session allowlist is what lets a guest

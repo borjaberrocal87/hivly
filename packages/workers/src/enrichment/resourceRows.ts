@@ -100,7 +100,12 @@ export async function buildResourceRows(
 
     const outcome = await fetchUrl(url, config.enrichment.fetch, guard, signal);
 
-    if (!outcome.ok && (outcome.reason === 'ssrf_blocked' || outcome.reason === 'scheme_disallowed')) {
+    if (
+      !outcome.ok &&
+      (outcome.reason === 'ssrf_blocked' ||
+        outcome.reason === 'scheme_disallowed' ||
+        outcome.reason === 'port_disallowed')
+    ) {
       continue; // D2: skip this URL entirely — no row, not a failure.
     }
 

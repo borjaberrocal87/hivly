@@ -16,6 +16,7 @@ import { SsrfBlockedError, type GuardedDispatcher } from './ssrfGuard.js';
 export type FetchOutcomeReason =
   | 'ssrf_blocked'
   | 'scheme_disallowed'
+  | 'port_disallowed'
   | 'too_many_redirects'
   | 'timeout'
   | 'too_large'
@@ -88,6 +89,13 @@ export async function fetchUrl(
 
     if (!allowedSchemes.has(parsed.protocol)) {
       return { ok: false, reason: 'scheme_disallowed' };
+    }
+    // Destination-port allowlist (L-8) — an additional guard check alongside the
+    // scheme allowlist, re-run every hop so a redirect to
+    // `https://public-host:8080/` is rejected too. Inert when the guard is
+    // disabled (dev-only escape hatch), same as Layer A below.
+    if (!guard.isPortAllowed(parsed)) {
+      return { ok: false, reason: 'port_disallowed' };
     }
     // Layer A (mandatory, not belt-and-braces — Layer B's connect.lookup is
     // never invoked for an IP-literal host).

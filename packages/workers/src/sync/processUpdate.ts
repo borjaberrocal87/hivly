@@ -140,7 +140,26 @@ export async function processUpdate(deps: ProcessUpdateDeps): Promise<ProcessRes
     // nothing, so a fresh-only assertion would never run).
     for (const row of embeddedRows) assertEmbeddingDimensions(row.embedding, dimensions);
 
-    await db.transaction(async (tx) => {
+    const acked = await db.transaction(async (tx) => {
+      // M-4 (update/delete race): re-verify the message is still alive under a
+      // ROW LOCK before the wipe-and-reinsert below. The tombstone guard above
+      // ran BEFORE the slow fetch+enrich+embed phase; the deleted-stream loop
+      // runs concurrently (sync/consumer.ts), so a hard delete completing
+      // mid-flight would otherwise let the reinsert resurrect purged orphan
+      // vectors (delete_policy: 'hard'). `FOR UPDATE` holds the row until this
+      // tx commits. No alive row → the delete won the race: abort as a no-op
+      // (touch nothing) but still ACK — there is nothing left to re-index.
+      const alive = await tx.execute(
+        sql`SELECT 1 FROM discord_messages WHERE id = ${messageId} AND deleted_at IS NULL FOR UPDATE`,
+      );
+      if (alive.rows.length === 0) {
+        logger.debug('message deleted mid-update — aborting reinsert as no-op (delete won the race)', {
+          messageId,
+          channelId,
+        });
+        return true;
+      }
+
       // Note #5: FK RESTRICT on user_read_status.embedding_id — read-status
       // rows must be deleted BEFORE the embeddings rows they reference.
       await tx.execute(sql`
@@ -193,9 +212,13 @@ export async function processUpdate(deps: ProcessUpdateDeps): Promise<ProcessRes
       }
 
       await tx.execute(sql`UPDATE discord_messages SET indexed_at = now() WHERE id = ${messageId}`);
+      return true;
     });
 
-    return { ack: true };
+    // `acked` is always true today (both the normal reinsert and the M-4
+    // deleted-mid-flight no-op ACK the entry); kept explicit so a future
+    // non-acking branch inside the tx surfaces here rather than silently acking.
+    return { ack: acked };
   } catch (err) {
     // AC-4: log the PEL locator ({ streamId, stream, messageId, channelId });
     // never log newContent or any message content — only ids/reason.

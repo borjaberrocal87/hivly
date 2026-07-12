@@ -5,9 +5,10 @@
 import { Router } from 'express';
 
 import type { SearchController } from '../presentation/controllers/searchController.js';
+import { asyncHandler } from './asyncHandler.js';
 
 export function createSearchRouter(controller: SearchController): Router {
   const router = Router();
-  router.get('/', (req, res) => void controller.search(req, res));
+  router.get('/', asyncHandler((req, res) => controller.search(req, res)));
   return router;
 }

@@ -277,7 +277,7 @@ describe('GET /api/conversations (integration)', () => {
     const agent = request.agent(appForA());
     await login(agent, `${suffix}-history`);
 
-    const first = await agent.post('/api/chat').send({ message: 'first turn' });
+    const first = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'first turn' });
     expect(first.status).toBe(200);
     const conversationId = first.text
       .split('\n\n')
@@ -285,7 +285,7 @@ describe('GET /api/conversations (integration)', () => {
       .map((c) => JSON.parse(c.replace(/^data: /, '')))
       .at(-1).conversationId as string;
 
-    const second = await agent.post('/api/chat').send({ message: 'second turn', conversationId });
+    const second = await agent.post('/api/chat').set('X-Requested-With', 'share2brain').send({ message: 'second turn', conversationId });
     expect(second.status).toBe(200);
 
     // The detail endpoint now shows all four persisted turns, chronological.

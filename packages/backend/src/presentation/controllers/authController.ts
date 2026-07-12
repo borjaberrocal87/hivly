@@ -219,6 +219,11 @@ export function createAuthController(deps: {
           // WINS over the store-level ttl — so the cookie and the Redis key expire
           // together with the short demo TTL, no store/config change needed.
           req.session.cookie.maxAge = guestAccess.sessionTtlMinutes * 60_000;
+          // L-3 (audit): the cookie/store TTL above is SLIDING — store.touch()
+          // renews it on every request, so an active guest would never expire.
+          // Pin an ABSOLUTE deadline the auth guard enforces (requireAuth), so a
+          // guest session dies sessionTtlMinutes after login regardless of activity.
+          req.session.guestExpiresAt = Date.now() + guestAccess.sessionTtlMinutes * 60_000;
           req.session.save((saveErr: unknown) => {
             if (saveErr) {
               console.error('[auth] guest session save failed:', saveErr instanceof Error ? saveErr.message : String(saveErr));

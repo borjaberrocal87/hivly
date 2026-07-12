@@ -6,19 +6,20 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "e2e:server": "tsx src/e2e/server.ts",
+    "e2e:server": "NODE_ENV=test tsx src/e2e/server.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit"
   },
   "dependencies": {
-    "@share2brain/shared": "*",
     "@langchain/langgraph": "^1.4.7",
+    "@share2brain/shared": "*",
     "connect-redis": "^9.0.0",
     "cors": "^2.8.5",
     "express": "^5.2.0",
     "express-rate-limit": "^8.5.2",
     "express-session": "^1.18.0",
     "helmet": "^8.2.0",
+    "rate-limit-redis": "^4.3.1",
     "redis": "^6.1.0"
   },
   "devDependencies": {

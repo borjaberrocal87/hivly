@@ -1,8 +1,9 @@
 // Unit tests for the SSE chat client (Story 5.4). Mocks `fetch` returning a
 // ReadableStream of `data: <json>\n\n` chunks (including a frame split across two
-// chunks) and asserts: the yielded frame sequence, the SSEFrameSchema.parse
-// rejection on a malformed frame, and the ChatStreamError throw on a non-ok
-// response.
+// chunks) and asserts: the yielded frame sequence, that a malformed frame is
+// skipped (with a warning) while valid frames keep streaming (L-11), the CSRF
+// defense-in-depth header on the POST (L-10), and the ChatStreamError throw on a
+// non-ok response.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SSEFrame } from '@share2brain/shared/schemas';
@@ -96,10 +97,39 @@ describe('streamChat', () => {
     expect(frames.map((f) => f.type)).toEqual(['token', 'done']);
   });
 
-  it('should reject when a frame fails SSEFrameSchema validation', async () => {
-    vi.stubGlobal('fetch', streamingFetch([`data: ${JSON.stringify({ type: 'bogus' })}\n\n`]));
+  it('should skip a malformed frame (with a warning) and keep streaming valid frames', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      streamingFetch([
+        `data: ${JSON.stringify({ type: 'bogus' })}\n\n`,
+        frame({ type: 'token', content: 'ok' }),
+        frame({ type: 'done', conversationId: '550e8400-e29b-41d4-a716-446655440000' }),
+      ]),
+    );
 
-    await expect(collect()).rejects.toThrow();
+    const frames = await collect();
+
+    // The corrupt frame is dropped; the valid token/done still come through.
+    expect(frames.map((f) => f.type)).toEqual(['token', 'done']);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('should send the X-Requested-With CSRF header on the POST', async () => {
+    const fetchMock = streamingFetch([
+      frame({ type: 'done', conversationId: '550e8400-e29b-41d4-a716-446655440000' }),
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await collect();
+
+    const [, init] = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(init.method).toBe('POST');
+    expect(new Headers(init.headers).get('X-Requested-With')).toBe('share2brain');
   });
 
   it('should throw ChatStreamError carrying the code on a non-ok response', async () => {

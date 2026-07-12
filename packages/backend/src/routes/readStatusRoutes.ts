@@ -10,12 +10,13 @@
 import { Router } from 'express';
 
 import type { ReadStatusController } from '../presentation/controllers/readStatusController.js';
+import { asyncHandler } from './asyncHandler.js';
 
 export function createReadStatusRouter(controller: ReadStatusController): Router {
   const router = Router();
-  router.get('/unread-count', (req, res) => void controller.unreadCount(req, res));
-  router.post('/mark-all', (req, res) => void controller.markAll(req, res));
-  router.post('/:embeddingId', (req, res) => void controller.markRead(req, res));
-  router.delete('/:embeddingId', (req, res) => void controller.unmarkRead(req, res));
+  router.get('/unread-count', asyncHandler((req, res) => controller.unreadCount(req, res)));
+  router.post('/mark-all', asyncHandler((req, res) => controller.markAll(req, res)));
+  router.post('/:embeddingId', asyncHandler((req, res) => controller.markRead(req, res)));
+  router.delete('/:embeddingId', asyncHandler((req, res) => controller.unmarkRead(req, res)));
   return router;
 }

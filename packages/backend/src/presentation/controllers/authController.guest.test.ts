@@ -122,6 +122,12 @@ describe('authController guest access — enabled', () => {
     expect(req.session.discordRoles).toEqual(['guest']);
     expect(req.session.isGuest).toBe(true);
     expect(req.session.cookie.maxAge).toBe(120 * 60_000);
+    // L-3 (audit): an ABSOLUTE expiry deadline is pinned (~now + ttl) so the guard
+    // can expire the guest regardless of the sliding cookie/store TTL.
+    const before = Date.now();
+    expect(typeof req.session.guestExpiresAt).toBe('number');
+    expect(req.session.guestExpiresAt!).toBeGreaterThan(before);
+    expect(req.session.guestExpiresAt!).toBeLessThanOrEqual(before + 120 * 60_000);
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({ ...GUEST_PROFILE, isGuest: true });
   });

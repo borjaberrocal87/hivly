@@ -219,7 +219,7 @@ describe('GET /api/stats (integration)', () => {
     await seedEmbedding(`${suffix}-b2:0`, CH_DENIED, [`${suffix}-b2`], twentyDaysAgo.toISOString());
 
     // Mark the "today" A-embedding read for the session (member) user.
-    const markRes = await agentMember.post(`/api/read-status/${embeddingAToday}`);
+    const markRes = await agentMember.post(`/api/read-status/${embeddingAToday}`).set('X-Requested-With', 'share2brain');
     expect(markRes.status).toBe(200);
 
     // Agent-usage KPI: 2 own `user` messages + 1 `assistant` reply for the session

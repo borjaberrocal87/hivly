@@ -212,10 +212,28 @@ describe('fetchUrl', () => {
   });
 
   it('should block a direct IP-literal request with the default blocklist (Layer A)', async () => {
+    // Use the default port (80) so the port allowlist (L-8) passes and the request
+    // reaches Layer A — the loopback literal is then rejected before any connect.
     const guardedConfig = { ...FETCH_CONFIG, block_private_ips: true };
     const guarded = createGuardedDispatcher(guardedConfig);
-    const outcome = await fetchUrl(`${baseUrl}/ok`, guardedConfig, guarded, neverAbortedSignal());
+    const outcome = await fetchUrl('http://127.0.0.1/', guardedConfig, guarded, neverAbortedSignal());
     expect(outcome).toEqual({ ok: false, reason: 'ssrf_blocked' });
+  });
+
+  it('should reject a non-allowlisted destination port with port_disallowed (L-8)', async () => {
+    // Guarded config permitting http+https, with a narrow BlockList that does NOT
+    // block 127.0.0.1 — so the request reaches the port check, which rejects the
+    // test server's ephemeral (non-80/443) port before connecting.
+    const customBlockList = new BlockList();
+    customBlockList.addSubnet('169.254.0.0', 16, 'ipv4');
+    const guardedConfig = {
+      ...FETCH_CONFIG,
+      block_private_ips: true,
+      allowed_schemes: ['http', 'https'] as ('http' | 'https')[],
+    };
+    const guarded = createGuardedDispatcher(guardedConfig, customBlockList);
+    const outcome = await fetchUrl(`${baseUrl}/ok`, guardedConfig, guarded, neverAbortedSignal());
+    expect(outcome).toEqual({ ok: false, reason: 'port_disallowed' });
   });
 
   it('should re-check SSRF on the redirect hop, not just the first hop', async () => {
@@ -225,7 +243,17 @@ describe('fetchUrl', () => {
     const customBlockList = new BlockList();
     customBlockList.addSubnet('169.254.0.0', 16, 'ipv4');
     const guardedConfig = { ...FETCH_CONFIG, block_private_ips: true };
-    const guarded = createGuardedDispatcher(guardedConfig, customBlockList);
+    // Inject an allowlist that also permits the test server's ephemeral port so
+    // the FIRST hop is reachable (the port allowlist is otherwise 80/443 only);
+    // the blocked redirect target (169.254.169.254:80) is still on an allowed
+    // port, so the SSRF Layer A re-check is what rejects it (AC-8).
+    const ephemeralPort = Number(new URL(baseUrl).port);
+    const guarded = createGuardedDispatcher(
+      guardedConfig,
+      customBlockList,
+      undefined,
+      new Set([ephemeralPort, 80, 443]),
+    );
     const outcome = await fetchUrl(
       `${baseUrl}/redirect-to-blocked`,
       guardedConfig,

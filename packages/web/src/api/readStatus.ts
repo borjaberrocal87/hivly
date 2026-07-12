@@ -9,11 +9,14 @@ import {
   type UnreadCountResponse,
 } from '@share2brain/shared/schemas';
 
+import { CSRF_HEADER } from './csrf';
+
 /** Mark a single fragment as read for the current user. Throws on failure (caller reverts optimistically). */
 export async function markRead(embeddingId: string): Promise<void> {
-  const res = await fetch(`/api/read-status/${embeddingId}`, {
+  const res = await fetch(`/api/read-status/${encodeURIComponent(embeddingId)}`, {
     method: 'POST',
     credentials: 'include',
+    headers: { ...CSRF_HEADER },
   });
   if (!res.ok) throw new Error(`POST /api/read-status/${embeddingId} failed: ${res.status}`);
 }
@@ -23,7 +26,7 @@ export async function markAll(channelId?: string): Promise<MarkAllResponse> {
   const res = await fetch('/api/read-status/mark-all', {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...CSRF_HEADER, 'Content-Type': 'application/json' },
     body: JSON.stringify(channelId ? { channelId } : {}),
   });
   if (!res.ok) throw new Error(`POST /api/read-status/mark-all failed: ${res.status}`);

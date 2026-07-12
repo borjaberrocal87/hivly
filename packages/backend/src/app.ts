@@ -9,6 +9,7 @@ import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
 
 import { createRagAgent } from './agent/graph.js';
 import { createAuthService } from './application/services/authService.js';
@@ -36,6 +37,7 @@ import { createSessionMiddleware } from './infrastructure/sessionStore.js';
 import { createDrizzleUserRepository } from './infrastructure/userRepository.drizzle.js';
 import { createRbacMiddleware } from './middleware/rbac.js';
 import { requireAuth } from './middleware/requireAuth.js';
+import { requireCustomHeader } from './middleware/requireCustomHeader.js';
 import { createAuthController } from './presentation/controllers/authController.js';
 import { createChannelsController } from './presentation/controllers/channelsController.js';
 import { createChatController } from './presentation/controllers/chatController.js';
@@ -45,6 +47,7 @@ import { createReadStatusController } from './presentation/controllers/readStatu
 import { createSearchController } from './presentation/controllers/searchController.js';
 import { createStatsController } from './presentation/controllers/statsController.js';
 import { createAuthRouter } from './routes/authRoutes.js';
+import { createErrorHandler } from './routes/errorHandler.js';
 import { createChannelsRouter } from './routes/channelsRoutes.js';
 import { createChatRouter } from './routes/chatRoutes.js';
 import { createConversationRouter } from './routes/conversationRoutes.js';
@@ -168,15 +171,23 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
   // and the e2e harness omit it, so this stays an empty array there and no
   // request is ever 429'd in tests. v8 option names: windowMs/limit (not the
   // deprecated `max`), standardHeaders as the IETF draft, legacyHeaders off.
+  //
+  // L-1 (audit): counters live in Redis via rate-limit-redis's RedisStore, not
+  // the default per-process MemoryStore — so limits survive a restart and are
+  // shared across replicas. The store is backed by the SAME node-redis client
+  // already used for sessions/streams (single client, AD-10 precedent). Each
+  // tier gets a distinct key prefix so their counters never collide.
   const limiterOptions = { standardHeaders: 'draft-8' as const, legacyHeaders: false };
+  const makeRedisStore = (prefix: string): RedisStore =>
+    new RedisStore({ sendCommand: (...args: string[]) => redis.sendCommand(args), prefix });
   const authLimiters = opts.rateLimit
-    ? [rateLimit({ ...limiterOptions, ...opts.rateLimit.auth })]
+    ? [rateLimit({ ...limiterOptions, ...opts.rateLimit.auth, store: makeRedisStore('rl:auth:') })]
     : [];
   const apiLimiters = opts.rateLimit
-    ? [rateLimit({ ...limiterOptions, ...opts.rateLimit.api })]
+    ? [rateLimit({ ...limiterOptions, ...opts.rateLimit.api, store: makeRedisStore('rl:api:') })]
     : [];
   const chatLimiters = opts.rateLimit
-    ? [rateLimit({ ...limiterOptions, ...opts.rateLimit.chat })]
+    ? [rateLimit({ ...limiterOptions, ...opts.rateLimit.chat, store: makeRedisStore('rl:chat:') })]
     : [];
 
   // Compose the auth + RBAC layers.
@@ -194,6 +205,14 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
     // Story 2.5: presence enables the two guest endpoints (omitted → they 404).
     guestAccess: opts.guestAccess,
   });
+
+  // L-2 (audit): CSRF defense-in-depth. Mounted on /api BEFORE both the auth
+  // router and the generic gate, so every mutating (non-GET) request under /api —
+  // including POST /api/auth/guest — must carry a non-empty X-Requested-With
+  // header. A cross-site HTML form cannot set a custom header, so this is a second
+  // layer behind SameSite=Lax. GET/HEAD/OPTIONS are exempt (OAuth login/callback
+  // are GET). The SPA sends `X-Requested-With: share2brain` on all mutating fetch.
+  app.use('/api', requireCustomHeader);
 
   // The auth router handles its own auth semantics (public login/callback,
   // session-checked me/roles/logout) and is registered BEFORE the generic gate,
@@ -282,6 +301,13 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
   const conversationService = createConversationService({ conversationRepo });
   const conversationController = createConversationController({ conversationService });
   app.use('/api/conversations', createConversationRouter(conversationController));
+
+  // M-3 (audit): final error-handling middleware — the LAST app.use, so it is the
+  // net for everything above it (asyncHandler-forwarded controller rejections AND
+  // sync throws in earlier middleware, e.g. express.json()'s malformed-JSON error).
+  // Logs via the injected logger when present, else console.error; its
+  // res.headersSent guard makes it a no-op for an SSE response already streaming.
+  app.use(createErrorHandler(opts.logger));
 
   return app;
 }

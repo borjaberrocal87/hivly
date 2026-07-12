@@ -111,6 +111,10 @@ function makeFakeDb(opts: {
   existing: boolean;
   deletedAt?: Date | null;
   oldRows?: OldRow[];
+  /** M-4: models the in-transaction `SELECT 1 … FOR UPDATE` liveness re-check.
+   *  Defaults to alive (a row). Set `false` to simulate the message being
+   *  hard/soft-deleted mid-flight (the delete winning the race). */
+  aliveInTx?: boolean;
 }) {
   const executeLog: string[] = [];
   const inserted: InsertedRow[] = [];
@@ -133,11 +137,18 @@ function makeFakeDb(opts: {
         }),
       };
     },
-    transaction: async (cb: (tx: unknown) => Promise<void>) => {
+    transaction: async (cb: (tx: unknown) => Promise<boolean>) => {
       transactionCount++;
       const tx = {
         execute: (q: unknown) => {
-          executeLog.push(sqlText(q));
+          const text = sqlText(q);
+          executeLog.push(text);
+          // M-4: the liveness re-check returns a row when the message is still
+          // alive; empty when it was deleted mid-flight (delete won the race).
+          if (text.includes('FOR UPDATE')) {
+            const alive = opts.aliveInTx ?? true;
+            return Promise.resolve({ rows: alive ? [{ ok: 1 }] : [] });
+          }
           return Promise.resolve({ rows: [] });
         },
         insert: () => ({
@@ -147,7 +158,7 @@ function makeFakeDb(opts: {
           },
         }),
       };
-      await cb(tx);
+      return cb(tx);
     },
   } as unknown as Database;
 
@@ -307,6 +318,39 @@ describe('processUpdate', () => {
     expect(inserted).toHaveLength(0);
     expect(executeLog.some((s) => s.includes('DELETE FROM embeddings'))).toBe(true);
     expect(executeLog.some((s) => s.includes('indexed_at'))).toBe(true);
+  });
+
+  it('should abort the reinsert as a no-op (but still ack) when the message is hard-deleted mid-update (M-4)', async () => {
+    const logger = makeLogger();
+    // The early tombstone guard sees a LIVE message (existing, deleted_at null),
+    // so the slow fetch+enrich phase runs; but by the time the tx opens, a
+    // concurrent hard delete has removed the row — the in-tx FOR UPDATE liveness
+    // check finds nothing, so nothing is reinserted (no resurrection) and the
+    // entry is still acked (the delete won the race).
+    const { db, inserted, transactionCount, executeLog } = makeFakeDb({
+      existing: true,
+      oldRows: [],
+      aliveInTx: false,
+    });
+
+    const result = await processUpdate({
+      event: updatedEvent({ newContent: 'see https://a.com' }),
+      db,
+      embedder,
+      config,
+      logger,
+    });
+
+    expect(result).toEqual({ ack: true });
+    expect(transactionCount()).toBe(1); // the tx opened and was entered
+    expect(inserted).toHaveLength(0); // NOTHING reinserted — no orphan resurrection
+    // The wipe/reinsert statements never ran — only the liveness SELECT did.
+    expect(executeLog.some((s) => s.includes('FOR UPDATE'))).toBe(true);
+    expect(executeLog.some((s) => s.includes('DELETE FROM embeddings'))).toBe(false);
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('deleted mid-update'),
+      expect.objectContaining({ messageId: 'm1', channelId: 'c1' }),
+    );
   });
 
   it('should reorder kept links to their new chunk_key positions', async () => {

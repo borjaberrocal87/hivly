@@ -59,6 +59,22 @@ describe('fetch DiscordOAuthClient', () => {
     expect(init.headers.Authorization).toBe('Bearer tok-1');
   });
 
+  it('should treat a null avatar as null', async () => {
+    fetchMock.mockResolvedValueOnce(fakeResponse({ id: 'd-1', username: 'ada', avatar: null }));
+    const client = createFetchDiscordOAuthClient(CFG);
+
+    const user = await client.getCurrentUser('tok-1');
+
+    expect(user).toEqual({ id: 'd-1', username: 'ada', avatar: null });
+  });
+
+  it('should throw when the current-user response is missing a string id (L-4)', async () => {
+    fetchMock.mockResolvedValueOnce(fakeResponse({ username: 'ada', avatar: null }));
+    const client = createFetchDiscordOAuthClient(CFG);
+
+    await expect(client.getCurrentUser('tok-1')).rejects.toThrow('invalid shape');
+  });
+
   it('should return the roles when the user is a guild member', async () => {
     fetchMock.mockResolvedValueOnce(fakeResponse({ roles: ['admin', 'mod'] }));
     const client = createFetchDiscordOAuthClient(CFG);
@@ -85,5 +101,19 @@ describe('fetch DiscordOAuthClient', () => {
     const client = createFetchDiscordOAuthClient(CFG);
 
     await expect(client.getGuildMember('tok-1', 'guild-1')).rejects.toThrow();
+  });
+
+  it('should throw when the member response roles is not an array (L-4)', async () => {
+    fetchMock.mockResolvedValueOnce(fakeResponse({ roles: 'not-an-array' }));
+    const client = createFetchDiscordOAuthClient(CFG);
+
+    await expect(client.getGuildMember('tok-1', 'guild-1')).rejects.toThrow('invalid roles');
+  });
+
+  it('should throw when the member response roles contains a non-string element (L-4)', async () => {
+    fetchMock.mockResolvedValueOnce(fakeResponse({ roles: ['admin', 123] }));
+    const client = createFetchDiscordOAuthClient(CFG);
+
+    await expect(client.getGuildMember('tok-1', 'guild-1')).rejects.toThrow('invalid roles');
   });
 });

@@ -5,9 +5,14 @@
 import { Router } from 'express';
 
 import type { ChatController } from '../presentation/controllers/chatController.js';
+import { asyncHandler } from './asyncHandler.js';
 
 export function createChatRouter(controller: ChatController): Router {
   const router = Router();
-  router.post('/', (req, res) => void controller.chat(req, res));
+  // SSE: chatController owns its own mid-stream error handling once headers are
+  // flushed. asyncHandler still catches a PRE-stream rejection (before flushHeaders)
+  // and routes it to the final error middleware, whose res.headersSent guard makes
+  // it a no-op if streaming already started.
+  router.post('/', asyncHandler((req, res) => controller.chat(req, res)));
   return router;
 }

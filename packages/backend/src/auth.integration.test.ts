@@ -116,7 +116,7 @@ describe('Auth endpoints (integration)', () => {
     expect(AuthMeResponseSchema.safeParse(me.body).success).toBe(true);
 
     // Logout deletes the Redis key immediately and blocks /me afterwards.
-    const out = await agent.post('/api/auth/logout');
+    const out = await agent.post('/api/auth/logout').set('X-Requested-With', 'share2brain');
     expect(out.status).toBe(200);
     expect(await clients.redis.exists(`sess:${sid}`)).toBe(0);
 

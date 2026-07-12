@@ -218,6 +218,33 @@ describe('chatController.chat', () => {
     expect(res.ended).toBe(true);
   });
 
+  it('should cap the retained guest conversation ids at the most recent 50 (L-5)', async () => {
+    const frames: SSEFrame[] = [{ type: 'done', conversationId: 'conv-1' }];
+    const resolveConversation = vi.fn(async () => CONV); // CONV.id === 'conv-1'
+    const streamChat = vi.fn(async function* () {
+      for (const frame of frames) yield frame;
+    });
+    const controller = createChatController({
+      chatService: stubService({ resolveConversation, streamChat }),
+    });
+    const res = fakeRes();
+    // Session already at the cap: 50 prior ids. Appending the new one must evict the
+    // oldest so the list stays bounded at 50 over the guest session's TTL.
+    const existing = Array.from({ length: 50 }, (_, i) => `old-${i}`);
+    const { req, session } = fakeGuestReq(
+      { message: 'hola' },
+      { allowedChannelIds: ['chan-1'], guestConversationIds: existing },
+    );
+
+    await controller.chat(req, res);
+
+    expect(session.guestConversationIds).toHaveLength(50);
+    expect(session.guestConversationIds).toContain('conv-1');
+    // The oldest id was evicted; the second-oldest is now the head.
+    expect(session.guestConversationIds).not.toContain('old-0');
+    expect(session.guestConversationIds![0]).toBe('old-1');
+  });
+
   it('should NOT record or re-save when a guest resumes an existing conversationId (2.5)', async () => {
     const frames: SSEFrame[] = [{ type: 'done', conversationId: 'conv-1' }];
     const resolveConversation = vi.fn(async () => CONV);

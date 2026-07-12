@@ -4,6 +4,7 @@ import type { SearchFragment, SSEFrame } from '@share2brain/shared/schemas';
 
 import type { ChatModel, ChatTurn } from '../domain/repositories/chatModel.js';
 import type { RagRetriever } from '../domain/repositories/ragRetriever.js';
+import { CONVERSATION_SUMMARY_MARKER } from './compress.js';
 import { createRagAgent } from './graph.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 
@@ -177,12 +178,16 @@ describe('createRagAgent().runChat', () => {
 
     const prepared = model.received[0];
     expect(prepared.some((t) => t.role === 'user' && t.content === 'the question')).toBe(true);
-    // UNCOMPRESSED PATH: exactly ONE system turn, at index 0 (grounding + RAG context
-    // merged). The counterpart of the compression-path assertion — the single-leading-
-    // system invariant must hold whether or not compression fired.
+    // M-1: exactly ONE system turn — the TRUSTED SYSTEM_PROMPT alone, with no
+    // untrusted content concatenated into it. The single-leading-system invariant
+    // must hold whether or not compression fired.
     expect(prepared.filter((t) => t.role === 'system')).toHaveLength(1);
     expect(prepared[0].role).toBe('system');
-    expect(prepared[0].content).toContain(SYSTEM_PROMPT);
+    expect(prepared[0].content).toBe(SYSTEM_PROMPT);
+    // The untrusted retrieved context rides in a separate, delimited 'user' turn.
+    const contextTurn = prepared.find((t) => t.role === 'user' && t.content.includes('<context>'));
+    expect(contextTurn).toBeDefined();
+    expect(contextTurn?.content).toMatch(/untrusted/i);
   });
 
   it('should compress an over-budget history into a system summary before the model reasons (AC3)', async () => {
@@ -214,14 +219,17 @@ describe('createRagAgent().runChat', () => {
     // The model is streamed twice: once to summarize (reason), once to respond.
     expect(model.received.length).toBe(2);
     const respondPrompt = model.received.at(-1) as ChatTurn[];
-    // COMPRESSION PATH: exactly ONE system turn, at index 0 — the compression summary
-    // is FOLDED INTO the single grounding system message, never emitted as a second
-    // system turn (which Anthropic rejects with "a 'system' message can only appear at
-    // index 0"). This is the regression the multi-system fix closes.
+    // M-1: exactly ONE system turn — the TRUSTED SYSTEM_PROMPT alone. The provider
+    // still accepts only one leading system message (Anthropic rejects a second with
+    // "a 'system' message can only appear at index 0"), and that invariant holds.
     expect(respondPrompt.filter((t) => t.role === 'system')).toHaveLength(1);
     expect(respondPrompt[0].role).toBe('system');
-    // The ephemeral summary is present, but as part of that single system message.
-    expect(respondPrompt[0].content).toContain('<conversation summary>');
+    expect(respondPrompt[0].content).toBe(SYSTEM_PROMPT);
+    // The ephemeral summary is UNTRUSTED user-derived data, so it rides in the
+    // delimited <context> 'user' turn (marked as such), never in the system message.
+    const contextTurn = respondPrompt.find((t) => t.role === 'user' && t.content.includes('<context>'));
+    expect(contextTurn?.content).toContain(CONVERSATION_SUMMARY_MARKER);
+    expect(respondPrompt.every((t) => t.role !== 'system' || !t.content.includes(CONVERSATION_SUMMARY_MARKER))).toBe(true);
     // The current turn is still present verbatim (recent tail preserved).
     expect(respondPrompt.some((t) => t.role === 'user' && t.content === 'the follow-up')).toBe(true);
   });
@@ -380,12 +388,18 @@ describe('createRagAgent().runChat', () => {
       }),
     );
 
-    // With the guard, memoryWindow 0 keeps zero turns — only the single merged
-    // system + RAG context message remains (no user turn). Without the guard,
-    // slice(-0) would have returned the FULL history instead.
+    // With the guard, memoryWindow 0 keeps zero conversation turns. What remains is
+    // the trusted SYSTEM_PROMPT plus the untrusted <context> 'user' turn (M-1) — no
+    // history user/assistant turns. Without the guard, slice(-0) would have returned
+    // the FULL history instead.
     const prepared = model.received[0];
-    expect(prepared.every((t) => t.role === 'system')).toBe(true);
-    // Still exactly one system turn — an empty window must not drop the invariant.
-    expect(prepared).toHaveLength(1);
+    expect(prepared).toHaveLength(2);
+    expect(prepared.filter((t) => t.role === 'system')).toHaveLength(1);
+    expect(prepared[0].role).toBe('system');
+    expect(prepared[0].content).toBe(SYSTEM_PROMPT);
+    expect(prepared[1].role).toBe('user');
+    expect(prepared[1].content).toContain('<context>');
+    // The current turn was dropped by the zero window (not smuggled back in).
+    expect(prepared.some((t) => t.content === 'the question')).toBe(false);
   });
 });

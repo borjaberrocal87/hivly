@@ -1,13 +1,14 @@
 import type { Share2BrainConfig } from '@share2brain/shared';
 import type { Database } from '@share2brain/shared/db';
 import type { RedisClient } from '@share2brain/shared/redis';
-import { STREAM_KEYS } from '@share2brain/shared/types/events';
+import { CONSUMER_GROUPS, STREAM_KEYS } from '@share2brain/shared/types/events';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { EnrichmentChatModel } from '../enrichment/enrich.js';
 import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import type { Embedder } from '../indexer/types.js';
 import type { Logger } from '../logger.js';
+import { reapPoisonEntries } from '../streams/poisonReaper.js';
 import { runSync as runSyncImpl } from './consumer.js';
 import { processDelete } from './processDelete.js';
 import { processUpdate } from './processUpdate.js';
@@ -27,6 +28,7 @@ function runSync(deps: {
   config: Share2BrainConfig;
   logger: Logger;
   signal: AbortSignal;
+  reapIntervalMs?: number;
 }) {
   const { redis, ...rest } = deps;
   return runSyncImpl({ redisUpdated: redis, redisDeleted: redis, enrichModel, guard, ...rest });
@@ -37,6 +39,12 @@ function runSync(deps: {
 // "ack" and assert the loop dispatches/XACKs correctly.
 vi.mock('./processUpdate.js', () => ({ processUpdate: vi.fn() }));
 vi.mock('./processDelete.js', () => ({ processDelete: vi.fn() }));
+// Same isolation for the reaper (own unit tests in streams/poisonReaper.test.ts);
+// keep the real DEFAULT_REAP_INTERVAL_MS the loop imports.
+vi.mock('../streams/poisonReaper.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../streams/poisonReaper.js')>()),
+  reapPoisonEntries: vi.fn(),
+}));
 
 const config = {} as unknown as Share2BrainConfig;
 const db = {} as unknown as Database;
@@ -79,6 +87,11 @@ function fakeRedis(opts: {
       acked.push({ stream, id });
       return Promise.resolve(1);
     }),
+    // Poison reaper (never triggers unless reapIntervalMs is set to 0 in a test).
+    xPendingRange: vi.fn().mockResolvedValue([]),
+    xAutoClaim: vi.fn().mockResolvedValue({ nextId: '0-0', messages: [], deletedMessages: [] }),
+    xRange: vi.fn().mockResolvedValue([]),
+    xAdd: vi.fn().mockResolvedValue('1-1'),
   } as unknown as RedisClient;
   return { redis, acked };
 }
@@ -92,6 +105,8 @@ beforeEach(() => {
   vi.mocked(processDelete).mockReset();
   vi.mocked(processUpdate).mockResolvedValue({ ack: true });
   vi.mocked(processDelete).mockResolvedValue({ ack: true });
+  vi.mocked(reapPoisonEntries).mockReset();
+  vi.mocked(reapPoisonEntries).mockResolvedValue([]); // no reclaimed entries unless a test says so
 });
 
 describe('runSync', () => {
@@ -269,6 +284,55 @@ describe('runSync', () => {
       expect.stringContaining('unhandled error'),
       expect.objectContaining({ streamId: '1-0', messageId: 'm1' }),
     );
+  });
+
+  it('should reap each stream’s PEL and re-dispatch whatever it reclaims', async () => {
+    const controller = new AbortController();
+    // The reaper is mocked here (dead-letter/reclaim logic lives in
+    // streams/poisonReaper.test.ts); assert the updated-stream loop invokes it
+    // and drives the reclaimed entry back through processUpdate + XACK.
+    vi.mocked(reapPoisonEntries).mockImplementation(({ stream }) =>
+      Promise.resolve(
+        stream === UPDATED_STREAM
+          ? [
+              {
+                id: '9-0',
+                message: {
+                  type: 'discord.message.updated',
+                  messageId: 'm9',
+                  channelId: 'c1',
+                  guildId: 'g1',
+                  timestamp: 't',
+                  newContent: 'x',
+                },
+              },
+            ]
+          : [],
+      ),
+    );
+    const { redis, acked } = fakeRedis({
+      reads: {
+        [UPDATED_STREAM]: [
+          () => null, // replay empty → break
+          () => null, // live BLOCK timeout; reap already fired at the top of this iteration
+          () => {
+            controller.abort();
+            return null;
+          },
+        ],
+        [DELETED_STREAM]: [() => null],
+      },
+    });
+
+    await runSync({ redis, db, embedder, config, logger: makeLogger(), signal: controller.signal, reapIntervalMs: 0 });
+
+    expect(reapPoisonEntries).toHaveBeenCalledWith(
+      expect.objectContaining({ stream: UPDATED_STREAM, group: CONSUMER_GROUPS.SYNC, consumer: 'consumer-1' }),
+    );
+    expect(processUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ event: expect.objectContaining({ messageId: 'm9' }) }),
+    );
+    expect(acked).toContainEqual({ stream: UPDATED_STREAM, id: '9-0' });
   });
 
   it('should do no reads on either stream when already aborted before the loop', async () => {

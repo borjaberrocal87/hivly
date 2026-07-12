@@ -14,14 +14,29 @@ import type { Share2BrainConfig } from '@share2brain/shared';
 import { discordMessages, embeddings, inArray, sql } from '@share2brain/shared/db';
 import type { Database } from '@share2brain/shared/db';
 import { assertEmbeddingDimensions } from '@share2brain/shared/providers';
+import type { RedisClient } from '@share2brain/shared/redis';
 
 import { buildEmbeddingText, type EnrichmentChatModel } from '../enrichment/enrich.js';
-import { buildResourceRows, type ResourceRow } from '../enrichment/resourceRows.js';
+import { extractUrls } from '../enrichment/extractUrls.js';
+import {
+  checkAndConsumeBudget,
+  type ResolvedEnrichmentRateLimit,
+} from '../enrichment/rateLimiter.js';
+import { buildResourceRows, type MessageOutcome, type ResourceRow } from '../enrichment/resourceRows.js';
 import type { GuardedDispatcher } from '../enrichment/ssrfGuard.js';
 import type { Logger } from '../logger.js';
 import { parseCreatedEvent } from './events.js';
 import { partitionByIndexState } from './partition.js';
 import type { Embedder, IndexStateRow, ParsedEntry, RawStreamEntry } from './types.js';
+
+/** Disabled limiter — used when no `rateLimit`/`redis` is threaded through (the
+ *  config block is absent, or a caller that predates M-5). Preserves the
+ *  pre-M-5 behavior exactly: every message runs FULL enrichment. */
+const DISABLED_RATE_LIMIT: ResolvedEnrichmentRateLimit = {
+  enabled: false,
+  perAuthorHourly: 0,
+  globalDaily: 0,
+};
 
 export interface IndexBatchDeps {
   entries: RawStreamEntry[];
@@ -37,6 +52,13 @@ export interface IndexBatchDeps {
   /** Aborted on SIGTERM/SIGINT — checked between messages/URLs so a shutdown
    *  never lets a partially-processed message get falsely stamped complete. */
   signal: AbortSignal;
+  /** Redis client for the M-5 spend limiter's counters. OPTIONAL: absent (with
+   *  no `rateLimit`, or a disabled one) means the budget is never consulted and
+   *  behavior is exactly the pre-M-5 pipeline. The Indexer consumer threads its
+   *  own client through. */
+  redis?: RedisClient;
+  /** Resolved enrichment budget (M-5). OPTIONAL: absent → disabled passthrough. */
+  rateLimit?: ResolvedEnrichmentRateLimit;
 }
 
 export interface IndexBatchResult {
@@ -46,11 +68,12 @@ export interface IndexBatchResult {
 }
 
 /**
- * One tx per message: UPSERT every resource row by `chunk_key`, then stamp
- * `indexed_at`. `rows`/`vectors` may be empty (the discard path) — the stamp
- * still gates on the SAME RETURNING check. Returns whether the stamp actually
- * touched the row (AD-13, no ack if it vanished between the dedup SELECT and
- * the stamp).
+ * One tx per message: re-verify liveness under a row lock (M-4), then UPSERT
+ * every resource row by `chunk_key` and stamp `indexed_at`. `rows`/`vectors`
+ * may be empty (the discard path) — the stamp still gates on the SAME RETURNING
+ * check. Returns whether the entry should be ACKed: `true` when the stamp
+ * touched the row, `true` when the message was deleted mid-flight (no-op, the
+ * delete won the race), `false` only when the stamp's RETURNING found no row.
  */
 async function persistMessage(
   db: Database,
@@ -58,8 +81,28 @@ async function persistMessage(
   channelId: string,
   rows: ResourceRow[],
   vectors: number[][],
+  logger: Logger,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
+    // M-4 (update/delete race): re-verify the message is still alive under a
+    // ROW LOCK before inserting any embeddings. The Sync worker's deleted-stream
+    // loop runs concurrently with the Indexer; a hard delete completing between
+    // the dedup SELECT and this tx would otherwise let us resurrect orphan
+    // vectors for a purged message (delete_policy: 'hard'). `FOR UPDATE` holds
+    // the row until this tx commits, so the stamp below can no longer race a
+    // delete either. No alive row → the delete won: abort as a no-op but still
+    // ACK (at-least-once is satisfied — there is nothing left to index).
+    const alive = await tx.execute(
+      sql`SELECT 1 FROM discord_messages WHERE id = ${messageId} AND deleted_at IS NULL FOR UPDATE`,
+    );
+    if (alive.rows.length === 0) {
+      logger.debug('message deleted mid-index — skipping persistence, acking no-op (delete won the race)', {
+        messageId,
+        channelId,
+      });
+      return true;
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       await tx
@@ -102,7 +145,8 @@ async function persistMessage(
  * `ackIds` so Redis redelivers them.
  */
 export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult> {
-  const { entries, db, embedder, config, logger, enrichModel, guard, signal } = deps;
+  const { entries, db, embedder, config, logger, enrichModel, guard, signal, redis } = deps;
+  const rateLimit = deps.rateLimit ?? DISABLED_RATE_LIMIT;
   const ackIds: string[] = [];
 
   // 1. Parse. Malformed / foreign-typed entries can never succeed — XACK them so
@@ -171,15 +215,37 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
       break;
     }
 
-    const { messageId, channelId, content } = parsedEntry.event;
+    const { messageId, channelId, content, authorId } = parsedEntry.event;
     const extraStreamIds = extraStreamIdsByMessageId.get(messageId) ?? [];
 
     try {
-      const outcome = await buildResourceRows(content, { config, enrichModel, guard, signal, logger });
+      // M-5 (economic DoS): the paid fetch/LLM/embeddings fan-out only happens
+      // for a message that actually carries URLs, so consult the spend budget
+      // ONLY then (a no-URL message costs nothing and must not consume budget).
+      // If the budget is exhausted, DEGRADE to no-URL indexing (the existing
+      // `discard` path: stamp + ack with zero rows) rather than drop the entry —
+      // at-least-once (AD-13) is preserved.
+      const hasUrls = extractUrls(content, config.enrichment.fetch.allowed_schemes).length > 0;
+      let outcome: MessageOutcome;
+      if (hasUrls && rateLimit.enabled && redis) {
+        const allowed = await checkAndConsumeBudget(redis, { authorId }, rateLimit, logger);
+        if (allowed) {
+          outcome = await buildResourceRows(content, { config, enrichModel, guard, signal, logger });
+        } else {
+          logger.info('degrading message to no-URL indexing — enrichment budget exceeded', {
+            messageId,
+            channelId,
+            authorId,
+          });
+          outcome = { kind: 'discard' };
+        }
+      } else {
+        outcome = await buildResourceRows(content, { config, enrichModel, guard, signal, logger });
+      }
 
       let stamped: boolean;
       if (outcome.kind === 'discard') {
-        stamped = await persistMessage(db, messageId, channelId, [], []);
+        stamped = await persistMessage(db, messageId, channelId, [], [], logger);
       } else {
         const texts = outcome.rows.map((row) => buildEmbeddingText(row.title, row.description));
         const vectors = await embedder.embedDocuments(texts);
@@ -188,7 +254,7 @@ export async function indexBatch(deps: IndexBatchDeps): Promise<IndexBatchResult
         }
         for (const vector of vectors) assertEmbeddingDimensions(vector, dimensions);
 
-        stamped = await persistMessage(db, messageId, channelId, outcome.rows, vectors);
+        stamped = await persistMessage(db, messageId, channelId, outcome.rows, vectors, logger);
       }
 
       if (stamped) {

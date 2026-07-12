@@ -15,8 +15,11 @@ import type { DiscordOAuthClient } from './domain/repositories/discordOAuthClien
 import { buildTestAppOptions, openTestClients, type TestClients } from './test-helpers.js';
 
 const suffix = `itest-readstatus-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
-const CH_ALLOWED = `chan-allowed-${suffix}`;
-const CH_DENIED = `chan-denied-${suffix}`;
+// Channel ids are passed to the API's channelId param, now capped at 32 chars
+// (a real Discord snowflake is ≤20). Keep them compact but per-run-unique.
+const chTok = `${Date.now().toString(36)}${Math.round(Math.random() * 1_000_000).toString(36)}`;
+const CH_ALLOWED = `cha-${chTok}`;
+const CH_DENIED = `chd-${chTok}`;
 const MEMBER_DISCORD_ID = `itest-readstatus-${suffix}`;
 // Suffix-unique role: RBAC expansion resolves against the WHOLE channel_permissions
 // table, so a literal role like 'member' would pull in every other integration
@@ -90,9 +93,9 @@ describe('/api/read-status (integration)', () => {
   it('should 401 without a session on every read-status route', async () => {
     const app = createApp(clients.db, clients.redis, buildTestAppOptions());
 
-    expect((await request(app).post(`/api/read-status/${idAllowed}`)).status).toBe(401);
-    expect((await request(app).delete(`/api/read-status/${idAllowed}`)).status).toBe(401);
-    expect((await request(app).post('/api/read-status/mark-all')).status).toBe(401);
+    expect((await request(app).post(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain')).status).toBe(401);
+    expect((await request(app).delete(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain')).status).toBe(401);
+    expect((await request(app).post('/api/read-status/mark-all').set('X-Requested-With', 'share2brain')).status).toBe(401);
     expect((await request(app).get('/api/read-status/unread-count')).status).toBe(401);
   });
 
@@ -101,7 +104,7 @@ describe('/api/read-status (integration)', () => {
     const agent = request.agent(app);
     await loginMember(agent);
 
-    const res = await agent.post('/api/read-status/not-a-uuid');
+    const res = await agent.post('/api/read-status/not-a-uuid').set('X-Requested-With', 'share2brain');
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -112,7 +115,7 @@ describe('/api/read-status (integration)', () => {
     const agent = request.agent(app);
     await loginMember(agent);
 
-    const res = await agent.post(`/api/read-status/${idDenied}`);
+    const res = await agent.post(`/api/read-status/${idDenied}`).set('X-Requested-With', 'share2brain');
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe('NOT_FOUND');
@@ -123,8 +126,8 @@ describe('/api/read-status (integration)', () => {
     const agent = request.agent(app);
     await loginMember(agent);
 
-    const first = await agent.post(`/api/read-status/${idAllowed}`);
-    const second = await agent.post(`/api/read-status/${idAllowed}`);
+    const first = await agent.post(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain');
+    const second = await agent.post(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain');
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
@@ -140,8 +143,8 @@ describe('/api/read-status (integration)', () => {
     const agent = request.agent(app);
     await loginMember(agent);
 
-    const first = await agent.delete(`/api/read-status/${idAllowed}`);
-    const second = await agent.delete(`/api/read-status/${idAllowed}`);
+    const first = await agent.delete(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain');
+    const second = await agent.delete(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain');
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
@@ -152,7 +155,7 @@ describe('/api/read-status (integration)', () => {
     const agent = request.agent(app);
     await loginMember(agent);
 
-    const res = await agent.post('/api/read-status/mark-all').send({ channelId: CH_DENIED });
+    const res = await agent.post('/api/read-status/mark-all').set('X-Requested-With', 'share2brain').send({ channelId: CH_DENIED });
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN');
@@ -163,13 +166,13 @@ describe('/api/read-status (integration)', () => {
     const agent = request.agent(app);
     await loginMember(agent);
     // Start from a clean slate for this user/fragment.
-    await agent.delete(`/api/read-status/${idAllowed}`);
+    await agent.delete(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain');
 
-    const first = await agent.post('/api/read-status/mark-all').send({});
+    const first = await agent.post('/api/read-status/mark-all').set('X-Requested-With', 'share2brain').send({});
     expect(first.status).toBe(200);
     expect(first.body.markedCount).toBeGreaterThanOrEqual(1);
 
-    const second = await agent.post('/api/read-status/mark-all').send({});
+    const second = await agent.post('/api/read-status/mark-all').set('X-Requested-With', 'share2brain').send({});
     expect(second.status).toBe(200);
     expect(second.body.markedCount).toBe(0);
 
@@ -184,7 +187,7 @@ describe('/api/read-status (integration)', () => {
     const app = createApp(clients.db, clients.redis, buildTestAppOptions({ oauth: memberOAuth([ROLE_MEMBER]) }));
     const agent = request.agent(app);
     await loginMember(agent);
-    await agent.delete(`/api/read-status/${idAllowed}`);
+    await agent.delete(`/api/read-status/${idAllowed}`).set('X-Requested-With', 'share2brain');
 
     const res = await agent.get('/api/read-status/unread-count');
 

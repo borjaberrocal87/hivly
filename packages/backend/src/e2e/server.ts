@@ -6,12 +6,19 @@
 // path here and NO auth-bypass route — just createApp wired with a fake OAuth
 // client + a deterministic query embedder over the reset-then-seeded test DB.
 //
-// Refuses to start under NODE_ENV=production before `main()` ever opens a DB/Redis
-// connection or listens on a port — no production route or listener is reachable,
-// even though the `import`s below (all side-effect-free at module load) still
-// evaluate first, per normal ES module hoisting. Run: `npm run e2e:server -w @share2brain/backend`.
-if (process.env.NODE_ENV === 'production') {
-  console.error('[e2e] refusing to start in production');
+// L-6 (audit): FAIL-CLOSED environment guard. The previous check only refused when
+// NODE_ENV === 'production', which failed OPEN when NODE_ENV was unset — this
+// reset-then-seed harness would then wipe whatever DB it was pointed at. Invert it:
+// abort UNLESS NODE_ENV is explicitly 'test' or 'development'. This runs before
+// `main()` opens any DB/Redis connection or listens on a port; the side-effect-free
+// `import`s below still hoist above it per ES module semantics.
+// Run: `NODE_ENV=test npm run e2e:server -w @share2brain/backend`.
+const E2E_ALLOWED_ENVS = new Set(['test', 'development']);
+if (!E2E_ALLOWED_ENVS.has(process.env.NODE_ENV ?? '')) {
+  console.error(
+    `[e2e] refusing to start: NODE_ENV must be 'test' or 'development' ` +
+      `(got ${JSON.stringify(process.env.NODE_ENV)}). This harness resets and reseeds its database.`,
+  );
   process.exit(1);
 }
 

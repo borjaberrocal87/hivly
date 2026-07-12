@@ -15,8 +15,11 @@ import type { DiscordOAuthClient } from './domain/repositories/discordOAuthClien
 import { buildTestAppOptions, openTestClients, type TestClients } from './test-helpers.js';
 
 const suffix = `itest-documents-${Date.now()}-${Math.round(Math.random() * 1_000_000)}`;
-const CH_ALLOWED = `chan-allowed-${suffix}`;
-const CH_DENIED = `chan-denied-${suffix}`;
+// Channel ids are passed to the API's channelId param, now capped at 32 chars
+// (a real Discord snowflake is ≤20). Keep them compact but per-run-unique.
+const chTok = `${Date.now().toString(36)}${Math.round(Math.random() * 1_000_000).toString(36)}`;
+const CH_ALLOWED = `cha-${chTok}`;
+const CH_DENIED = `chd-${chTok}`;
 const MEMBER_DISCORD_ID = `itest-documents-${suffix}`;
 // Suffix-unique role: RBAC expansion resolves against the WHOLE channel_permissions
 // table, so a literal role like 'member' would pull in every other integration
@@ -158,7 +161,7 @@ describe('GET /api/documents (integration)', () => {
     const fragA = listBefore.body.results.find((r: { messageId: string }) => r.messageId === `${suffix}-a`);
     expect(fragA.isRead).toBe(false);
 
-    const markRes = await agent.post(`/api/read-status/${fragA.id}`);
+    const markRes = await agent.post(`/api/read-status/${fragA.id}`).set('X-Requested-With', 'share2brain');
     expect(markRes.status).toBe(200);
 
     const listAfter = await agent.get('/api/documents?limit=100');
@@ -198,7 +201,7 @@ describe('GET /api/documents (integration)', () => {
 
     const before = await agent.get('/api/documents?limit=100');
     const fragA = before.body.results.find((r: { messageId: string }) => r.messageId === `${suffix}-a`);
-    await agent.post(`/api/read-status/${fragA.id}`);
+    await agent.post(`/api/read-status/${fragA.id}`).set('X-Requested-With', 'share2brain');
 
     const res = await agent.get('/api/documents?unreadOnly=true&limit=100');
 

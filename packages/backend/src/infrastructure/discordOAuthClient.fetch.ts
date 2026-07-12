@@ -2,6 +2,8 @@
 // REST API with the global fetch (Node 24+). discord.js is intentionally NOT used
 // here — that library is for the bot's Gateway connection; the backend only needs
 // these three REST calls of the OAuth2 flow.
+import { z } from 'zod';
+
 import type {
   DiscordGuildMember,
   DiscordOAuthClient,
@@ -10,6 +12,21 @@ import type {
 
 const DISCORD_API = 'https://discord.com/api';
 const FETCH_TIMEOUT_MS = 10_000;
+
+// L-4 (audit): validate the Discord REST responses at the boundary instead of
+// blindly casting (mirrors the validated exchangeCode path). A malformed shape
+// (missing id, non-string roles) then fails cleanly here rather than propagating
+// an `undefined` id or a non-string role deeper into auth/RBAC. Extra fields are
+// tolerated (Discord returns many we don't consume).
+const DiscordUserResponseSchema = z.object({
+  id: z.string(),
+  username: z.string(),
+  avatar: z.string().nullish(),
+});
+
+const DiscordGuildMemberResponseSchema = z.object({
+  roles: z.array(z.string()),
+});
 
 export function createFetchDiscordOAuthClient(cfg: {
   clientId: string;
@@ -50,8 +67,11 @@ export function createFetchDiscordOAuthClient(cfg: {
       if (!res.ok) {
         throw new Error(`Discord user fetch failed (${res.status})`);
       }
-      const json = (await res.json()) as { id: string; username: string; avatar: string | null };
-      return { id: json.id, username: json.username, avatar: json.avatar ?? null };
+      const parsed = DiscordUserResponseSchema.safeParse(await res.json());
+      if (!parsed.success) {
+        throw new Error('Discord user response has an invalid shape');
+      }
+      return { id: parsed.data.id, username: parsed.data.username, avatar: parsed.data.avatar ?? null };
     },
 
     async getGuildMember(
@@ -69,12 +89,11 @@ export function createFetchDiscordOAuthClient(cfg: {
       if (!res.ok) {
         throw new Error(`Discord guild member fetch failed (${res.status})`);
       }
-      const json = (await res.json()) as Record<string, unknown>;
-      // Validate roles shape at the boundary.
-      if (!Array.isArray(json.roles)) {
+      const parsed = DiscordGuildMemberResponseSchema.safeParse(await res.json());
+      if (!parsed.success) {
         throw new Error('Discord guild member response has invalid roles');
       }
-      return { roles: json.roles as string[] };
+      return { roles: parsed.data.roles };
     },
   };
 }

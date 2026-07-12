@@ -242,11 +242,102 @@ describe('loadConfig', () => {
     expect(() => loadConfig(path)).toThrow(/SHARE2BRAIN_TEST_UNSET_VAR/);
   });
 
+  it('should confine ${VAR} interpolation to the string value, not inject YAML structure (M-6)', () => {
+    const previous = process.env.SHARE2BRAIN_TEST_EVIL;
+    // A secret whose value contains YAML metacharacters (newline + a sibling key).
+    // Interpolating the RAW text (the old approach) would have injected a new
+    // top-level key; interpolating the parsed tree keeps it a literal string.
+    process.env.SHARE2BRAIN_TEST_EVIL = 'sk-real\nallowed_origins: ["*"]';
+    try {
+      const yaml = VALID_YAML.replace('"sk-ant-test"', '"${SHARE2BRAIN_TEST_EVIL}"');
+      const path = writeFixture('evil.yml', yaml);
+
+      const config = loadConfig(path);
+
+      expect(config.agent.api_key).toBe('sk-real\nallowed_origins: ["*"]');
+      // The injected key did NOT leak into the real allowed_origins.
+      expect(config.security.allowed_origins).toEqual(['http://localhost:5173']);
+    } finally {
+      if (previous === undefined) delete process.env.SHARE2BRAIN_TEST_EVIL;
+      else process.env.SHARE2BRAIN_TEST_EVIL = previous;
+    }
+  });
+
+  it('should reject out-of-bounds numeric behavior fields (M-8)', () => {
+    const overIter = writeFixture('iter.yml', VALID_YAML.replace('max_iterations: 10', 'max_iterations: 1000000000'));
+    expect(() => loadConfig(overIter)).toThrow(/max_iterations/);
+
+    const badTemp = writeFixture('temp.yml', VALID_YAML.replace('temperature: 0.7', 'temperature: 99'));
+    expect(() => loadConfig(badTemp)).toThrow(/temperature/);
+
+    const badTtl = writeFixture('ttl.yml', VALID_YAML.replace('role_cache_ttl: 300', 'role_cache_ttl: -1'));
+    expect(() => loadConfig(badTtl)).toThrow(/role_cache_ttl/);
+  });
+
+  it('should default security.cookie_secure to undefined and parse it when present (M-2)', () => {
+    expect(loadConfig(writeFixture('nocookie.yml', VALID_YAML)).security.cookie_secure).toBeUndefined();
+
+    const yaml = VALID_YAML.replace(
+      '  allowed_origins:\n    - "http://localhost:5173"',
+      '  cookie_secure: false\n  allowed_origins:\n    - "http://localhost:5173"',
+    );
+    expect(loadConfig(writeFixture('cookie.yml', yaml)).security.cookie_secure).toBe(false);
+  });
+
+  it('should parse an optional enrichment.rate_limit block and validate it (M-5)', () => {
+    expect(loadConfig(writeFixture('norl.yml', VALID_YAML)).enrichment.rate_limit).toBeUndefined();
+
+    // Appended under the existing enrichment block (block_private_ips is its last field).
+    const withRl = VALID_YAML.replace(
+      '    block_private_ips: true\n',
+      '    block_private_ips: true\n  rate_limit:\n    enabled: true\n    per_author_hourly: 5\n    global_daily: 500\n',
+    );
+    expect(loadConfig(writeFixture('rl.yml', withRl)).enrichment.rate_limit).toEqual({
+      enabled: true,
+      per_author_hourly: 5,
+      global_daily: 500,
+    });
+
+    const badRl = VALID_YAML.replace(
+      '    block_private_ips: true\n',
+      '    block_private_ips: true\n  rate_limit:\n    enabled: true\n    per_author_hourly: 0\n    global_daily: 500\n',
+    );
+    expect(() => loadConfig(writeFixture('rlbad.yml', badRl))).toThrow(/per_author_hourly|rate_limit/);
+  });
+
   it('should throw a descriptive error when a required key is missing', () => {
     const yaml = VALID_YAML.replace(/agent:[\s\S]*?api_key: "sk-ant-test"\n/, '');
     const path = writeFixture('missing-key.yml', yaml);
 
     expect(() => loadConfig(path)).toThrow(/agent/);
+  });
+
+  it('should reject a non-numeric or empty Discord snowflake id (S-6)', () => {
+    const empty = writeFixture('gid-empty.yml', VALID_YAML.replace('"111111111111111111"', '""'));
+    expect(() => loadConfig(empty)).toThrow(/guild_id|snowflake/i);
+
+    const nonNumeric = writeFixture('cid-nan.yml', VALID_YAML.replace('id: "1234567890"', 'id: "not-a-snowflake"'));
+    expect(() => loadConfig(nonNumeric)).toThrow(/snowflake|channels/i);
+  });
+
+  it('should reject a "*" or path-bearing allowed_origin (S-8)', () => {
+    const wild = writeFixture('cors-star.yml', VALID_YAML.replace('"http://localhost:5173"', '"*"'));
+    expect(() => loadConfig(wild)).toThrow(/allowed_origins|origin/i);
+
+    const withPath = writeFixture('cors-path.yml', VALID_YAML.replace('"http://localhost:5173"', '"http://localhost:5173/app"'));
+    expect(() => loadConfig(withPath)).toThrow(/allowed_origins|origin/i);
+  });
+
+  it('should accept an empty sentry_dsn but reject a malformed one (S-5)', () => {
+    expect(loadConfig(writeFixture('sentry-empty.yml', VALID_YAML)).observability.sentry_dsn).toBe('');
+
+    const bad = writeFixture('sentry-bad.yml', VALID_YAML.replace('sentry_dsn: ""', 'sentry_dsn: "not a url"'));
+    expect(() => loadConfig(bad)).toThrow(/sentry_dsn/i);
+  });
+
+  it('should reject a non-HTTPS slack webhook_url when notifications are enabled (S-5)', () => {
+    const yaml = `${VALID_YAML}notifications:\n  enabled: true\n  provider: "slack"\n  slack:\n    webhook_url: "http://hooks.example.com/x"\n`;
+    expect(() => loadConfig(writeFixture('slack-http.yml', yaml))).toThrow(/webhook_url|HTTPS/i);
   });
 
   it('should throw when the YAML is malformed', () => {
