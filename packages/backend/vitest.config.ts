@@ -14,6 +14,9 @@ export default defineConfig({
     name: 'backend-integration',
     root: import.meta.dirname,
     include: ['src/**/*.integration.test.ts'],
+    // Load the repo-root .env (DATABASE_URL / REDIS_URL) before the specs run;
+    // CI env vars still win (see the setup file).
+    setupFiles: ['../../vitest.integration-setup.ts'],
     // Real sockets can be slow to open on a cold container; be generous.
     testTimeout: 15_000,
     hookTimeout: 15_000,
