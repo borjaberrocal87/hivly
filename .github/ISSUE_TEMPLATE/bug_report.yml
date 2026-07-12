@@ -43,6 +43,7 @@ body:
         - workers (indexer / sync)
         - backend (API / RAG agent)
         - web (SPA)
+        - shared (domain kernel — schema / contracts / config loading)
         - deployment (Docker Compose / nginx / config)
     validations:
       required: true
@@ -53,13 +54,14 @@ body:
       options:
         - Docker Compose (full stack)
         - Local dev (npm run dev + infra in Docker)
+        - Other (bare metal, Kubernetes, ... — describe below)
     validations:
       required: true
   - type: input
     id: version
     attributes:
       label: Version / commit
-      placeholder: v0.1.0 or `git rev-parse --short HEAD`
+      placeholder: output of `git rev-parse --short HEAD`, e.g. 2b07cc0
   - type: textarea
     id: logs
     attributes:

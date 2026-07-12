@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Initial open-source release of the Share2Brain MVP.
+The Share2Brain MVP feature set, ahead of the first tagged release.
 
 ### Added
 
@@ -29,6 +29,8 @@ Initial open-source release of the Share2Brain MVP.
 - **Notifications** — optional Telegram/Slack notifications.
 - **UI internationalization** — Spanish and English, selected via
   `ui.language` and served from `/api/ui-config`.
-- **Deployment** — 7-service Docker Compose stack (nginx as the only exposed
-  service, one-shot migrator), configured via `Share2Brain.config.yml` +
+- **Deployment** — 7-service Docker Compose stack (nginx as the single public
+  entry point, one-shot migrator), configured via `Share2Brain.config.yml` +
   `.env`.
+
+[Unreleased]: https://github.com/borjaberrocal87/share2brain/commits/main

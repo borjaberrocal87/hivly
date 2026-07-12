@@ -12,13 +12,15 @@ Closes #
 
 ## Verification gate
 
-<!-- All PRs must be green. Paste a summary or let CI speak for you. -->
+<!-- CI covers lint, typecheck, unit tests and build. Integration/e2e suites are
+     NOT run by CI — run them locally when they apply and paste a summary. -->
 
 - [ ] `npm run lint` passes
+- [ ] `npm run typecheck` passes
 - [ ] `npm run test` passes
 - [ ] `npm run build` passes
-- [ ] Touched DB/API: `npm run test:integration` passes
-- [ ] Touched UI: `npm run test:e2e` passes (screenshots below for visual changes)
+- [ ] Touched DB/API: `npm run test:integration` passes locally (not run by CI)
+- [ ] Touched UI: `npm run test:e2e` passes locally (screenshots below for visual changes)
 
 ## Invariants check (see CONTRIBUTING.md)
 

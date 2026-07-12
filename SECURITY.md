@@ -25,8 +25,9 @@ credit you in the advisory (unless you prefer to stay anonymous).
 
 ## Supported versions
 
-Share2Brain is pre-1.0. Only the latest release (and `main`) receives security
-fixes. If you self-host, keep your deployment updated:
+Share2Brain is pre-1.0 with no tagged releases yet: security fixes land on
+`main` only. Once versioned releases exist, the latest release (and `main`)
+will be supported. If you self-host, keep your deployment updated:
 
 ```bash
 git pull && docker compose build && docker compose up -d

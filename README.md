@@ -38,10 +38,14 @@ cp Share2Brain.config.yml.example Share2Brain.config.yml    # behavior (channels
 
 # 3. Launch
 docker compose up -d
-docker compose ps          # verify: postgres, redis, migrator (one-shot), bot, workers, backend, nginx
+docker compose ps -a       # verify: postgres, redis, bot, workers, backend, nginx running;
+                           # migrator is one-shot and shows as Exited (0) once migrations applied
 ```
 
-Open `http://localhost` — nginx is the only exposed service (ports 80/443).
+Open `http://localhost` — nginx is the single public entry point (port 80; to
+enable HTTPS, provide your own certs in `certs/` and uncomment the 443 server
+block in `nginx.conf`). Note: postgres also binds `127.0.0.1:5432` for local
+tooling, so free that port or stop any local PostgreSQL first.
 
 You will need:
 
@@ -80,7 +84,7 @@ Discord ──▶ Bot ──▶ Redis Streams ──▶ Workers ──▶ Postgr
 | Event queue | Redis 8 (Streams) |
 | ORM / migrations | Drizzle ORM 0.45 + drizzle-kit |
 | Web | React 19, Vite 8 |
-| Edge | nginx 1.27 (single exposed port) |
+| Edge | nginx 1.27 (single public entry point) |
 | Packaging | Docker Compose v2 (7 services) |
 | Testing | Vitest (unit/integration) + Playwright (e2e) |
 

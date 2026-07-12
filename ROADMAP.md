@@ -4,7 +4,7 @@ Where Share2Brain is and where it's heading. This is a living document — the
 best way to influence it is to [open an issue](https://github.com/borjaberrocal87/share2brain/issues)
 describing your use case.
 
-## ✅ Shipped (MVP)
+## ✅ Shipped (MVP — on `main`, first tagged release pending)
 
 - Automatic ingestion of Discord messages (realtime + historical backfill)
 - AI-curated resource index: shared links enriched with title + description
@@ -39,8 +39,10 @@ Ideas we want, pending design work — feedback especially welcome:
 
 - **Agent execution-trace panel** — inspect how the agent reasoned: retrieval
   steps, tool calls, and why each source was selected.
-- **More UI languages** — the i18n plumbing is in place; new locales are a
-  `locales/<lang>.json` away. Contributions welcome.
+- **More UI languages** — the UI is fully translation-ready (Spanish and
+  English today). A new locale needs a `locales/<lang>.json` in `packages/web`
+  plus registering the language code in the shared config schema and the i18n
+  setup. Contributions welcome.
 - **Additional ingestion sources** — the pipeline is event-driven and
   source-agnostic by design; Discord is the first adapter.
 

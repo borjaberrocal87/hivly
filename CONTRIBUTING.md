@@ -79,8 +79,10 @@ Vitest, co-located as `*.test.ts`. AAA pattern, behavior-driven names (`should <
 Every PR must be green on:
 
 ```bash
-npm run lint && npm run test && npm run build
+npm run lint && npm run typecheck && npm run test && npm run build
 ```
+
+CI runs exactly these four checks on every PR.
 
 Touched the DB, API, or UI? Also run the relevant integration/e2e suite (`npm run test:integration` needs Postgres+Redis up — and no live app stack using the same DB; `npm run test:e2e` for the web).
 
