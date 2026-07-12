@@ -117,6 +117,7 @@ describe('loadConfig', () => {
     expect(config.security.rate_limit.chat.max_requests).toBe(20);
     expect(config.notifications).toBeUndefined();
     expect(config.streams).toBeUndefined();
+    expect(config.ui).toBeUndefined();
     expect(config.enrichment.language).toBe('en');
     expect(config.enrichment.llm.provider).toBe('anthropic');
     expect(config.enrichment.llm.api_key).toBe('sk-ant-enrichment-test');
@@ -160,6 +161,44 @@ describe('loadConfig', () => {
     const path = writeFixture('streams-bad.yml', yaml);
 
     expect(() => loadConfig(path)).toThrow(/trim_interval_ms|streams/);
+  });
+
+  // Epic 10 — `ui` is an OPTIONAL top-level block (absent ⇒ config.ui undefined;
+  // the "es" default is resolved by the consumer, D1). A PRESENT block requires
+  // `language` (fail loud per AD-8). VALID_YAML stays WITHOUT a `ui:` block — it
+  // is the "absent" fixture (see the assertion above).
+  it('should parse ui.language "en" when present', () => {
+    const yaml = `${VALID_YAML}ui:\n  language: "en"\n`;
+    const path = writeFixture('ui-en.yml', yaml);
+
+    const config = loadConfig(path);
+
+    expect(config.ui).toEqual({ language: 'en' });
+  });
+
+  it('should parse ui.language "es" when present', () => {
+    const yaml = `${VALID_YAML}ui:\n  language: "es"\n`;
+    const path = writeFixture('ui-es.yml', yaml);
+
+    const config = loadConfig(path);
+
+    expect(config.ui).toEqual({ language: 'es' });
+  });
+
+  it('should reject an unsupported ui.language', () => {
+    const yaml = `${VALID_YAML}ui:\n  language: "fr"\n`;
+    const path = writeFixture('ui-bad-language.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/ui|language/);
+  });
+
+  it('should reject an empty ui block missing language', () => {
+    // A bare `ui:` key with no value parses as YAML null, not `{}` — the Zod
+    // issue path is `['ui']`, not `['ui', 'language']`.
+    const yaml = `${VALID_YAML}ui:\n`;
+    const path = writeFixture('ui-empty.yml', yaml);
+
+    expect(() => loadConfig(path)).toThrow(/ui/);
   });
 
   // Story 2.5 — access_control.guest_access is an OPTIONAL block, OFF by default;

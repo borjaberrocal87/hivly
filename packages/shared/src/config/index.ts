@@ -215,6 +215,17 @@ export const Share2BrainConfigSchema = z.object({
     trim_interval_ms: z.number().int().positive().optional(),
     max_len: z.number().int().positive().nullable().optional(),
   }).optional(),
+  // UI language for the SPA (Epic 10). The whole block is OPTIONAL — an absent
+  // `ui:` key stays valid (same rationale as `notifications`/`streams`). NO
+  // `.default()` here (repo-wide convention): the consumer (`createApp`)
+  // resolves the "es" default. A PRESENT block requires `language` — fail loud
+  // per AD-8, same as an explicit block without `enabled` elsewhere. Governs
+  // ONLY the SPA (literals, date/number formatting, client-side error
+  // messages); the AI-generated content language remains `enrichment.language`,
+  // a separate concern.
+  ui: z.object({
+    language: z.enum(['es', 'en'], { message: 'ui.language must be "es" or "en"' }),
+  }).optional(),
 }).superRefine((config, ctx) => {
   // A "custom" provider is an arbitrary OpenAI-compatible endpoint, so it is
   // meaningless without a base_url. Enforce a non-empty base_url for both the
