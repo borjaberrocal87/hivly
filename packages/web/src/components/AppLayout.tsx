@@ -87,11 +87,11 @@ export function AppLayout({
         />
 
         {activeScreen === 'search' ? (
-          <SearchView guildId={guildId} />
+          <SearchView guildId={guildId} isMobile={isMobile} />
         ) : activeScreen === 'docs' ? (
-          <DocsView unreadCounts={unreadCounts} onUnreadChange={onUnreadChange} />
+          <DocsView unreadCounts={unreadCounts} onUnreadChange={onUnreadChange} isMobile={isMobile} />
         ) : (
-          <StatsView />
+          <StatsView isMobile={isMobile} />
         )}
       </div>
     </div>

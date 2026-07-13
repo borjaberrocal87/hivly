@@ -227,6 +227,24 @@ describe('StatsView', () => {
   });
 });
 
+describe('StatsView — responsive padding (Story 11.3, AC1, AC2)', () => {
+  it('should use the desktop padding when isMobile is not passed (default false — keeps existing tests green)', () => {
+    fetchStats.mockReturnValue(new Promise(() => {}));
+
+    const { container } = render(<StatsView />);
+
+    expect((container.firstChild as HTMLElement).style.padding).toBe('34px 40px 60px');
+  });
+
+  it('should raise the bottom padding to clear the fixed bottom-nav when isMobile is true', () => {
+    fetchStats.mockReturnValue(new Promise(() => {}));
+
+    const { container } = render(<StatsView isMobile />);
+
+    expect((container.firstChild as HTMLElement).style.padding).toBe('22px 16px 104px');
+  });
+});
+
 describe('StatsView — en locale (Story 10.2, AC2)', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');

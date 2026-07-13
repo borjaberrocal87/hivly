@@ -15,7 +15,17 @@ import { fetchStats } from '../api/stats';
 
 type Status = 'loading' | 'done' | 'error';
 
-const containerStyle: CSSProperties = { flex: 1, overflowY: 'auto', padding: '34px 40px 60px' };
+interface StatsViewProps {
+  /**
+   * Below 760px (Story 11.3): raise the container's bottom padding to clear the
+   * fixed 62px bottom-nav. Optional/default-false so the direct-render view tests
+   * stay green untouched (D1) and jsdom's no-matchMedia desktop path holds.
+   */
+  isMobile?: boolean;
+}
+
+// padding is set at the render site (isMobile-driven), so it is intentionally not in the const.
+const containerStyle: CSSProperties = { flex: 1, overflowY: 'auto' };
 const innerStyle: CSSProperties = { maxWidth: 1040, margin: '0 auto' };
 
 const sectionCardStyle: CSSProperties = {
@@ -87,7 +97,7 @@ function KpiIcon({ kpiKey }: { kpiKey: StatsKpi['key'] }): ReactElement {
   );
 }
 
-export function StatsView(): ReactElement {
+export function StatsView({ isMobile = false }: StatsViewProps = {}): ReactElement {
   const { t } = useTranslation();
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [status, setStatus] = useState<Status>('loading');
@@ -111,7 +121,7 @@ export function StatsView(): ReactElement {
   }, []);
 
   return (
-    <div style={containerStyle}>
+    <div style={{ ...containerStyle, padding: isMobile ? '22px 16px 104px' : '34px 40px 60px' }}>
       <div style={innerStyle}>
         <h2
           style={{

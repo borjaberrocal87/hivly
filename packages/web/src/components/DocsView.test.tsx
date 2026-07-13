@@ -365,6 +365,46 @@ describe('DocsView', () => {
   });
 });
 
+describe('DocsView — responsive (Story 11.3, AC1, AC3)', () => {
+  it('should use the desktop padding when isMobile is not passed (default false — keeps existing tests green)', () => {
+    fetchChannels.mockResolvedValue([]);
+    fetchDocuments.mockResolvedValue(page([], 0));
+
+    const { container } = render(<DocsView unreadCounts={{}} onUnreadChange={vi.fn()} />);
+
+    expect((container.firstChild as HTMLElement).style.padding).toBe('34px 40px 60px');
+  });
+
+  it('should raise the bottom padding to clear the fixed bottom-nav when isMobile is true', () => {
+    fetchChannels.mockResolvedValue([]);
+    fetchDocuments.mockResolvedValue(page([], 0));
+
+    const { container } = render(<DocsView unreadCounts={{}} onUnreadChange={vi.fn()} isMobile />);
+
+    expect((container.firstChild as HTMLElement).style.padding).toBe('22px 16px 104px');
+  });
+
+  it('should align the table grid to the design (280px first column, min-width 720) so wide content scrolls inside its box (AC3)', async () => {
+    fetchChannels.mockResolvedValue([]);
+    fetchDocuments.mockResolvedValue(page([DOC_UNREAD], 1));
+
+    renderView();
+
+    // The header grid holds the column labels; its parent grid carries the layout.
+    const header = ((await screen.findByText('documento')).parentElement) as HTMLElement;
+    const row = screen.getByText('Unread Fragment').closest('.kh-doc-row') as HTMLElement;
+
+    // Anchor the FULL template (all five tracks) — a bare toContain('280px') would also
+    // pass for '1280px' and would not catch drift in the four fixed columns (D3).
+    const expectedGrid = /minmax\(280px,\s*1fr\)\s+44px\s+92px\s+116px\s+84px/;
+    expect(header.style.gridTemplateColumns).toMatch(expectedGrid);
+    expect(header.style.minWidth).toBe('720px');
+    // The row grid must stay byte-identical to the header grid (D3 header↔row sync).
+    expect(row.style.gridTemplateColumns).toBe(header.style.gridTemplateColumns);
+    expect(row.style.minWidth).toBe(header.style.minWidth);
+  });
+});
+
 describe('DocsView — en locale (Story 10.2, AC2)', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
