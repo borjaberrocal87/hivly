@@ -65,6 +65,14 @@
   color: var(--accent-ink);
 }
 
+/* Mobile bottom-nav items (Story 11.2). Active/inactive colors are state-driven
+   inline (no touch :hover), so only the keyboard-a11y focus outline lives here —
+   matching the app-wide :focus-visible convention (11.1 D5). */
+.kh-bottom-nav-item:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
+}
+
 /* Header icon buttons (theme + logout) share the base look from inline styles;
    only their hover accents differ. */
 .kh-icon-btn:hover {

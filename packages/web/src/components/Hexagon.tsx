@@ -15,7 +15,7 @@ const AMBER = '#F5A623';
 
 // Exact inner dimensions per outer size, from Share2Brain Web.dc.html. Sizes not
 // listed fall back to the proportional rule (middle ~0.55x, dot ~0.19x).
-const EXACT_MIDDLE: Record<number, number> = { 74: 42, 32: 18, 30: 15 };
+const EXACT_MIDDLE: Record<number, number> = { 74: 42, 32: 18, 30: 15, 28: 16 };
 const EXACT_DOT: Record<number, number> = { 74: 14, 32: 6 };
 
 interface HexagonProps {

@@ -2,7 +2,9 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover (Story 11.2): lets env(safe-area-inset-bottom) resolve > 0
+         on notched iOS so the mobile bottom-nav's safe-area padding is not dead. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Share2Brain</title>
     <!-- FOUC-free theme init (Story 2.2, AC6): runs synchronously before the stylesheet
          <link>s below, so the persisted theme is applied to <html data-kh> before the

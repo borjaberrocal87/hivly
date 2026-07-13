@@ -195,7 +195,28 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-13  # story 11-1 re-review #2 (3rd pass, bmad-code-review): CONVERGED, 0 new findings.
+last_updated: 2026-07-13  # story 11-2 review → done (bmad-code-review, 2 rounds): all 7 ACs SATISFIED. R1: 0 patch / 2 defer (11.3 contentPad + 11.4 chat FAB) / 9 dismissed. R2 (challenged all R1 dismissals — all UPHELD): 1 NEW patch FIXED — Header community-name span had dropped the design-verbatim overflow/ellipsis/nowrap + wrapper minWidth:0 (Web.dc.html:163-164), long guild name overflowed collapsed mobile header. Re-gate green (typecheck / web 219 / build / eslint 0)
+# story 11-2 in-progress → review (bmad-dev-story): useIsMobile hook + responsive shell
+# SHIPPED. useIsMobile.ts over window.matchMedia('(max-width:760px)'), the matchMedia guard in BOTH initializer+effect
+# (jsdom has none → false/desktop → all web unit tests green, ZERO churn — the linchpin held). App.tsx drills isMobile →
+# AppLayout ({isMobile ? BottomNav : Sidebar}, conditional render, /Documentos/i matches ONE button) → Header (28px Hexagon
+# via new EXACT_MIDDLE[28]=16; statsLine+live-pill+username hidden; headerPad 0 14px). New BottomNav.tsx
+# reuses exported Sidebar.NAV_ITEMS (accessible-name parity), Documentos badge via App.totalUnread path (data-testid
+# bottom-nav-badge). index.html viewport-fit=cover. .kh-bottom-nav-item:focus-visible added. contentPad=11.3, chat FAB=11.4
+# (NOT here — mobile bottom padding interim-clipped by design/D6). Gate green: lint 0 / 1081 unit+web (+8: 5 hook + 3 shell) /
+# build 5 pkgs / 28 e2e Desktop-Chrome 1280px, ZERO baseline churn. git diff packages/ = web ONLY, AD-3+AD-6 intact, no new dep.
+# D3 REVERSED per Borja: guest-mode badge kept VISIBLE on mobile (only isGuest gates the pill, no !isMobile) — re-gate green.
+# Next: PR + bmad-code-review 11-2 (different LLM), then (11-3 ∥ 11-4).
+# || (prior) last_updated: 2026-07-13  # story 11-2 backlog → ready-for-dev (bmad-create-story): useIsMobile hook + responsive shell.
+# useIsMobile over window.matchMedia('(max-width: 760px)') — MUST guard `typeof window.matchMedia !== 'function'` (jsdom has
+# no matchMedia) → returns false/desktop → all ~100 web unit tests + App.test.tsx stay green with ZERO churn (the linchpin).
+# App.tsx calls the hook, drills isMobile → AppLayout (isMobile ? BottomNav : Sidebar, conditional render so /Documentos/i
+# matches ONE button) → Header (28px Hexagon logo; hide statsLine+live-pill+username; headerPad 0 14px). New BottomNav.tsx
+# reuses exported NAV_ITEMS+Screen from Sidebar (accessible-name parity), Documentos unread badge via App.totalUnread path.
+# index.html gains viewport-fit=cover for env(safe-area-inset-bottom). contentPad=11.3, chat FAB=11.4 (NOT here). Playwright
+# chromium=Desktop Chrome 1280px>760 → 28 e2e stay desktop/green. Frontend-only, AD-3+AD-6 intact, no new dep. Story file
+# 11-2-web-useismobile-shell-responsive-applayout-header.md. Flags: D3 (hide guest badge on mobile). Next: bmad-dev-story 11-2.
+# || (prior) last_updated: 2026-07-13  # story 11-1 re-review #2 (3rd pass, bmad-code-review): CONVERGED, 0 new findings.
 # Convergence-breaker re-verified the docs patch (both lines correct, phantom-token-free), ran tsc -p packages/web
 # (exit 0) + DocsView.test.tsx (21/21), confirmed remaining --text-* refs are only historical _bmad-output artifacts +
 # the design snapshot (out of scope). Story stays done, fully converged. Next: PR + bmad-checkpoint-preview, then 11-2.
@@ -826,7 +847,7 @@ development_status:
   # (useIsMobile over matchMedia). New FR27. Binding sequence: 11-1 -> 11-2 -> (11-3, 11-4) -> 11-5.
   epic-11: in-progress
   11-1-web-refresh-design-tokens-estados-interaccion: done
-  11-2-web-useismobile-shell-responsive-applayout-header: backlog
+  11-2-web-useismobile-shell-responsive-applayout-header: done
   11-3-web-adaptacion-responsive-vistas-search-docs-stats: backlog
   11-4-web-chat-widget-responsive-fab-panel: backlog
   11-5-web-e2e-harness-visual-movil-tema-claro: backlog
