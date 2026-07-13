@@ -5,6 +5,7 @@
 import type { CSSProperties, ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Hexagon } from './Hexagon';
 import { DiscordIcon, LogoutIcon, MoonIcon, SunIcon, UserIcon } from './icons';
 import type { Theme } from '../hooks/useTheme';
 
@@ -17,15 +18,18 @@ interface HeaderProps {
   onLogout: () => void;
   /** Guest-mode flag (Story 2.5): show the "Modo invitado" pill + label logout "Salir". */
   isGuest: boolean;
+  /** Below 760px (Story 11.2): collapse to logo + essential actions, tighter padding. */
+  isMobile: boolean;
 }
 
-const headerStyle: CSSProperties = {
+// Padding is dynamic (Story 11.2) — computed inline off isMobile. Everything
+// else in the header base is viewport-independent.
+const headerBaseStyle: CSSProperties = {
   height: 62,
   flexShrink: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  padding: '0 26px',
   borderBottom: '1px solid var(--line)',
   background: 'var(--bg)',
 };
@@ -52,55 +56,75 @@ export function Header({
   onToggleTheme,
   onLogout,
   isGuest,
+  isMobile,
 }: HeaderProps): ReactElement {
   const { t } = useTranslation();
   return (
-    <header style={headerStyle}>
+    <header style={{ ...headerBaseStyle, padding: isMobile ? '0 14px' : '0 26px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        {isMobile && <Hexagon size={28} innerBg="bg" />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
           <span style={{ color: '#5865F2', display: 'flex' }}>
             <DiscordIcon size={17} />
           </span>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>{communityName}</span>
+          <span
+            style={{
+              fontWeight: 600,
+              fontSize: 15,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {communityName}
+          </span>
         </div>
-        <span style={{ width: 1, height: 18, background: 'var(--border-strong)' }} />
-        <span
-          style={{
-            fontFamily: "'IBM Plex Mono', monospace",
-            fontSize: 11.5,
-            color: 'var(--tx4)',
-          }}
-        >
-          {statsLine}
-        </span>
+        {!isMobile && (
+          <>
+            <span style={{ width: 1, height: 18, background: 'var(--border-strong)' }} />
+            <span
+              style={{
+                fontFamily: "'IBM Plex Mono', monospace",
+                fontSize: 11.5,
+                color: 'var(--tx4)',
+              }}
+            >
+              {statsLine}
+            </span>
+          </>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 7,
-            padding: '5px 11px',
-            border: '1px solid var(--border)',
-            borderRadius: 999,
-            background: 'var(--surface)',
-          }}
-        >
-          <span
-            aria-hidden="true"
-            data-testid="live-pulse"
+        {!isMobile && (
+          <div
             style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: '#F5A623',
-              animation: 'kh-pulse 1.6s ease-in-out infinite',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '5px 11px',
+              border: '1px solid var(--border)',
+              borderRadius: 999,
+              background: 'var(--surface)',
             }}
-          />
-          <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{t('header.liveIndexing')}</span>
-        </div>
+          >
+            <span
+              aria-hidden="true"
+              data-testid="live-pulse"
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: '#F5A623',
+                animation: 'kh-pulse 1.6s ease-in-out infinite',
+              }}
+            />
+            <span style={{ fontSize: 11.5, color: 'var(--tx3)' }}>{t('header.liveIndexing')}</span>
+          </div>
+        )}
 
+        {/* Guest pill (Story 2.5) shows on both viewports — Borja's call for 11.2:
+            keep the "Modo invitado" state explicit on mobile too (D3 reversed). */}
         {isGuest && (
           <div
             data-testid="guest-mode-badge"
@@ -137,7 +161,9 @@ export function Header({
           >
             {user.initials}
           </span>
-          <span style={{ fontSize: 13.5, color: 'var(--tx2)' }}>{user.name}</span>
+          {!isMobile && (
+            <span style={{ fontSize: 13.5, color: 'var(--tx2)' }}>{user.name}</span>
+          )}
 
           <button
             type="button"

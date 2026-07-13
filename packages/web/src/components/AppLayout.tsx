@@ -6,6 +6,7 @@ import type { CSSProperties, ReactElement } from 'react';
 
 import type { UnreadCountResponse } from '@share2brain/shared/schemas';
 
+import { BottomNav } from './BottomNav';
 import { DocsView } from './DocsView';
 import { Header } from './Header';
 import { SearchView } from './SearchView';
@@ -24,6 +25,8 @@ interface AppLayoutProps {
   onLogout: () => void;
   /** Guest-mode flag (Story 2.5) — drives the header "Modo invitado" pill + "Salir". */
   isGuest: boolean;
+  /** Below 760px (Story 11.2): swap Sidebar → BottomNav and collapse the Header. */
+  isMobile: boolean;
   guildId: string;
   /** Total unread count across all allowed channels — drives the sidebar badge (AC7). */
   unreadCount: number;
@@ -57,6 +60,7 @@ export function AppLayout({
   onToggleTheme,
   onLogout,
   isGuest,
+  isMobile,
   guildId,
   unreadCount,
   unreadCounts,
@@ -64,7 +68,11 @@ export function AppLayout({
 }: AppLayoutProps): ReactElement {
   return (
     <div style={shellStyle}>
-      <Sidebar activeScreen={activeScreen} onNavigate={onNavigate} unreadCount={unreadCount} />
+      {isMobile ? (
+        <BottomNav activeScreen={activeScreen} onNavigate={onNavigate} unreadCount={unreadCount} />
+      ) : (
+        <Sidebar activeScreen={activeScreen} onNavigate={onNavigate} unreadCount={unreadCount} />
+      )}
 
       <div style={contentColumnStyle}>
         <Header
@@ -75,6 +83,7 @@ export function AppLayout({
           onToggleTheme={onToggleTheme}
           onLogout={onLogout}
           isGuest={isGuest}
+          isMobile={isMobile}
         />
 
         {activeScreen === 'search' ? (

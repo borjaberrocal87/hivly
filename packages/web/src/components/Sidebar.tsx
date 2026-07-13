@@ -67,7 +67,10 @@ const statusRowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-
 // D9 trap: this is evaluated at import time, before main.tsx resolves the
 // boot language — labels are translation KEYS, resolved at render (below),
 // never plain text here.
-const NAV_ITEMS: {
+// Exported (Story 11.2) so BottomNav reuses the single nav definition — same
+// screens, i18n label KEYS and 18px icons — guaranteeing accessible-name parity
+// between the desktop sidebar and the mobile bottom-nav.
+export const NAV_ITEMS: {
   screen: Screen;
   labelKey: 'sidebar.nav.search' | 'sidebar.nav.docs' | 'sidebar.nav.stats';
   icon: ReactElement;

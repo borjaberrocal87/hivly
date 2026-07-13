@@ -20,6 +20,7 @@ import { AppLayout } from './components/AppLayout';
 import { ChatWidget } from './components/ChatWidget';
 import { LoginScreen } from './components/LoginScreen';
 import type { Screen } from './components/Sidebar';
+import { useIsMobile } from './hooks/useIsMobile';
 import { useTheme } from './hooks/useTheme';
 import { initialsFromUsername } from './lib/initials';
 import './styles/components.css';
@@ -42,6 +43,9 @@ export function App(): ReactElement {
   // stale response overwrite a newer one.
   const unreadReqRef = useRef(0);
   const { theme, toggleTheme } = useTheme();
+  // Responsive shell (Story 11.2): drilled to AppLayout → {BottomNav, Header}.
+  // NOT passed to ChatWidget — the chat FAB reposition is Story 11.4.
+  const isMobile = useIsMobile();
 
   // On mount: resolve the session. A stale/absent cookie yields 401 → anon.
   useEffect(() => {
@@ -148,6 +152,7 @@ export function App(): ReactElement {
         onToggleTheme={toggleTheme}
         onLogout={logout}
         isGuest={user.isGuest === true}
+        isMobile={isMobile}
         guildId={user.guildId}
         unreadCount={totalUnread}
         unreadCounts={unreadCounts}
