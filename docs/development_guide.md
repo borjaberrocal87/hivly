@@ -115,6 +115,10 @@ npm run test:integration         # integration suites (need Postgres + Redis; se
 npm run build           # build all packages
 ```
 
+The integration suites read `DATABASE_URL` / `REDIS_URL` from your repo-root `.env`, which is
+loaded automatically (`vitest.integration-setup.ts`) — no need to export them by hand. Real
+environment variables, when set (e.g. in CI), take precedence over the `.env` values.
+
 > ⚠️ **Do not run `npm run test:integration` against a database a live app stack is also using.**
 > The integration suites seed and assert on shared tables (`channel_permissions`, `discord_messages`,
 > …). A running `docker compose` **backend** materializes `channel_permissions` from its own config on
