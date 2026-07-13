@@ -195,7 +195,36 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-13  # ops-4-sentry-observability review → done (bmad-code-review, incl. 3 post-patch
+last_updated: 2026-07-13  # story 8-2 review → done (bmad-code-review, 3 layers @ Opus 4.8, + re-run #1 CONVERGED:
+# Auditor "PATCHES CLEAN" AC1–AC5/D1–D8 hold, patch #2 does NOT violate D5; Edge surfaced 1 new low — whitespace-
+# only description (guard used truthiness not trim) → FIXED: guard hardened to doc.description.trim(). Gate re-run
+# green: lint 0 / 1072 unit+web / build 5 pkgs. + re-run #2 CONVERGED: Auditor "everything holds, 0 violations";
+# Blind's 2 items verified false (z.string() required → no .trim() throw; all fixtures/seed non-empty); Edge 0
+# code defects — only test-coverage gaps → added co-location assertion (title.parentElement === description.
+# parentElement) guarding the single-cell merge. + re-run #3 CONVERGED: Auditor "everything holds, 0 violations,
+# fix #4 reinforces D4/compatible D6"; Blind+Edge validated the co-location assertion robust & non-vacuous, 0 code
+# defects → closed the last recurring gap by adding a falsy-branch test (description '   ' → no doc-row-description
+# node; D5's no-empty-code premise no longer holds once the guard exists). Residual: only exact 5-grid-child count
+# stays deferred under D6. Gate green: lint 0 / 1073 unit+web (+1) / build 5 pkgs). Orig triage below. Auditor: AC1–AC5
+# + D1–D8 all SATISFIED, 0 scope violations. Triage: 1 decision-needed (→ patch), 1 patch, 1 defer, 5 dismissed
+# (grid 5=5 children, block-stacking, badge order per AC2, no stray i18n refs, empty-desc test ruled by D5 — all
+# verified false/handled). Patches APPLIED: (1) overflowWrap:'anywhere' on title+description spans — post-tweak
+# clamp removal let a long unbroken token (URL) overflow → horizontal scroll; (2) guard {doc.description && …}
+# — empty z.string() desc left a stray 4px marginTop gap. Defer → deferred-work.md: tests don't assert
+# description nesting / 5-grid-child count (accepted by D6, optional hardening). Gate green: lint 0 / 1072
+# unit+web (1 skip) / build 5 pkgs / 28 e2e (chromium dark, docs.spec 4.4/8.1/8.2 + 7.6).
+# || (prior) story 8-2 backlog → ready-for-dev (bmad-create-story): DocsView merges título +
+# descripción into a single «Documento» column (title + "Nuevo" badge + description stacked), grid 6→5 tracks
+# (minmax(240px,1fr) 44px 92px 116px 84px, min-width 720→620). Frontend-only, DOM-merge re-skin — zero handler/
+# effect/CSS changes (components.css + global.css UNTOUCHED). Story file
+# 8-2-web-docsview-columna-documento-unificada.md. D1 description marginTop:4; D2 locale keys renamed
+# (docs.columns.title→document) + docs.columns.description DELETED in BOTH es/en in lockstep (parity.test.ts is
+# a hard gate); D4 description <span> moves into the title cell's content wrapper after the badge, testid kept;
+# D5 the 8.1-deferred empty-description defer is RESOLVED by de-promotion (no code). epics.md UX-DR12/UX-DR13 +
+# Historia 8.2 already synced by the correct-course step. Fresh-context analysis caught 2 header-label waits the
+# SCP change-list omitted (DocsView.test.tsx:255 es empty-state, :369 en locale). Branch
+# feat/8-2-docsview-documento-column off ab044ac. Next: bmad-dev-story 8-2.
+# || (prior) ops-4-sentry-observability review → done (bmad-code-review, incl. 3 post-patch
 # re-runs @ Borja's request). Re-run #3 FULLY CONVERGED: all 3 layers 0 new findings — Blind "ship it",
 # Edge 0 edges, Auditor 0 AC violations (AC1–AC11 SATISFIED); graceful-shutdown flush verified sound on both
 # clean+error paths, no hang/double-exit. Only a doc-hygiene note (story File List missing lifecycle.ts/
@@ -707,8 +736,13 @@ development_status:
   # Post-roadmap UX refinement: DocsView read/unread visual language was inverted
   # (dim-the-read → "disabled" feeling) vs the updated design Share2Brain Web.dc.html.
   # Frontend-only, Moderate. Approved by Borja incl. 6-column layout.
-  epic-8: done
+  # Reopened 2026-07-13 via bmad-correct-course (sprint-change-proposal-2026-07-13-docsview-documento.md):
+  # design refinement — título + descripción merge into a single "documento" column (title on line 1
+  # + "Nuevo" badge if unread, description stacked below), grid 6→5 tracks. Frontend-only, Moderate.
+  # No schema/contract/backend; DocumentFragment unchanged. epics.md UX-DR12/13 + Historia 8.2 synced.
+  epic-8: in-progress
   8-1-web-docsview-rediseno-estados-leido-no-leido-y-layout-columnas: done
+  8-2-web-docsview-columna-documento-unificada: done
   epic-8-retrospective: optional
 
   # ── Épico 9: Estadísticas del Conocimiento (Analytics) ──────────────────────
