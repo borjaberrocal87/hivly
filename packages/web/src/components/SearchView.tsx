@@ -16,6 +16,12 @@ import { initialsFromUsername } from '../lib/initials';
 
 interface SearchViewProps {
   guildId: string;
+  /**
+   * Below 760px (Story 11.3): raise the container's bottom padding to clear the
+   * fixed 62px bottom-nav. Optional/default-false so the many direct-render view
+   * tests stay green untouched (D1) and jsdom's no-matchMedia desktop path holds.
+   */
+  isMobile?: boolean;
 }
 
 type Status = 'idle' | 'loading' | 'done' | 'error';
@@ -23,10 +29,11 @@ type Status = 'idle' | 'loading' | 'done' | 'error';
 const SEARCH_DEBOUNCE_MS = 250;
 const MIN_QUERY_LENGTH = 2;
 
-const containerStyle: CSSProperties = { flex: 1, overflowY: 'auto', padding: '34px 40px 60px' };
+// padding is set at the render site (isMobile-driven), so it is intentionally not in the const.
+const containerStyle: CSSProperties = { flex: 1, overflowY: 'auto' };
 const innerStyle: CSSProperties = { maxWidth: 860, margin: '0 auto' };
 
-export function SearchView({ guildId }: SearchViewProps): ReactElement {
+export function SearchView({ guildId, isMobile = false }: SearchViewProps): ReactElement {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchFragment[]>([]);
@@ -89,7 +96,7 @@ export function SearchView({ guildId }: SearchViewProps): ReactElement {
   const showEmptyState = searched && status === 'done' && visibleResults.length === 0;
 
   return (
-    <div style={containerStyle}>
+    <div style={{ ...containerStyle, padding: isMobile ? '22px 16px 104px' : '34px 40px 60px' }}>
       <div style={innerStyle}>
         <h2
           style={{

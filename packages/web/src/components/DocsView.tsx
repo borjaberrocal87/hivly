@@ -20,16 +20,23 @@ import { CheckIcon, ExternalLinkIcon } from './icons';
 interface DocsViewProps {
   unreadCounts: UnreadCountResponse;
   onUnreadChange: () => void;
+  /**
+   * Below 760px (Story 11.3): raise the container's bottom padding to clear the
+   * fixed 62px bottom-nav. Optional/default-false so the many direct-render view
+   * tests stay green untouched (D1) and jsdom's no-matchMedia desktop path holds.
+   */
+  isMobile?: boolean;
 }
 
 type Status = 'idle' | 'loading' | 'error';
 
 const PAGE_SIZE = 20;
 
-const containerStyle: CSSProperties = { flex: 1, overflowY: 'auto', padding: '34px 40px 60px' };
+// padding is set at the render site (isMobile-driven), so it is intentionally not in the const.
+const containerStyle: CSSProperties = { flex: 1, overflowY: 'auto' };
 const innerStyle: CSSProperties = { maxWidth: 980, margin: '0 auto' };
 
-export function DocsView({ unreadCounts, onUnreadChange }: DocsViewProps): ReactElement {
+export function DocsView({ unreadCounts, onUnreadChange, isMobile = false }: DocsViewProps): ReactElement {
   const { t } = useTranslation();
   const [docs, setDocs] = useState<DocumentFragment[]>([]);
   const [page, setPage] = useState(1);
@@ -163,7 +170,7 @@ export function DocsView({ unreadCounts, onUnreadChange }: DocsViewProps): React
   const showEmptyState = unreadOnly && visibleDocs.length === 0 && status !== 'loading';
 
   return (
-    <div style={containerStyle}>
+    <div style={{ ...containerStyle, padding: isMobile ? '22px 16px 104px' : '34px 40px 60px' }}>
       <div style={innerStyle}>
         <h2
           style={{
@@ -306,9 +313,9 @@ export function DocsView({ unreadCounts, onUnreadChange }: DocsViewProps): React
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(240px,1fr) 44px 92px 116px 84px',
+                gridTemplateColumns: 'minmax(280px,1fr) 44px 92px 116px 84px',
                 gap: 12,
-                minWidth: 620,
+                minWidth: 720,
                 padding: '12px 20px',
                 background: 'var(--bg)',
                 borderBottom: '1px solid var(--border)',
@@ -427,9 +434,9 @@ function DocRow({ doc, onClick }: { doc: DocumentFragment; onClick: () => void }
       }}
       style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(240px,1fr) 44px 92px 116px 84px',
+        gridTemplateColumns: 'minmax(280px,1fr) 44px 92px 116px 84px',
         gap: 12,
-        minWidth: 620,
+        minWidth: 720,
         padding: '15px 20px',
         borderBottom: '1px solid var(--line)',
         alignItems: 'center',

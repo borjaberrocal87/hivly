@@ -10,18 +10,28 @@ import type { UnreadCountResponse } from '@share2brain/shared/schemas';
 
 import { AppLayout } from './AppLayout';
 
-// Mock the content views so AppLayout can render without their API effects.
-vi.mock('./SearchView', () => ({ SearchView: () => null }));
-vi.mock('./DocsView', () => ({ DocsView: () => null }));
-vi.mock('./StatsView', () => ({ StatsView: () => null }));
+// Mock the content views so AppLayout can render without their API effects. The mocks
+// are spies (still return null) so we can assert AppLayout forwards isMobile to them.
+const { searchViewSpy, docsViewSpy, statsViewSpy } = vi.hoisted(() => ({
+  searchViewSpy: vi.fn<(props: { isMobile?: boolean }) => null>(() => null),
+  docsViewSpy: vi.fn<(props: { isMobile?: boolean }) => null>(() => null),
+  statsViewSpy: vi.fn<(props: { isMobile?: boolean }) => null>(() => null),
+}));
+vi.mock('./SearchView', () => ({ SearchView: searchViewSpy }));
+vi.mock('./DocsView', () => ({ DocsView: docsViewSpy }));
+vi.mock('./StatsView', () => ({ StatsView: statsViewSpy }));
 
 const STATS_LINE = 'STATS-LINE-MARKER';
 
-function renderShell(overrides: { isMobile: boolean; unreadCount?: number }) {
+function renderShell(overrides: {
+  isMobile: boolean;
+  unreadCount?: number;
+  activeScreen?: 'search' | 'docs' | 'stats';
+}) {
   const unreadCounts: UnreadCountResponse = {};
   return render(
     <AppLayout
-      activeScreen="docs"
+      activeScreen={overrides.activeScreen ?? 'docs'}
       onNavigate={() => {}}
       communityName="Test Community"
       statsLine={STATS_LINE}
@@ -90,4 +100,26 @@ describe('AppLayout responsive shell', () => {
     expect(screen.queryByTestId('bottom-nav-badge')).toBeNull();
     expect(screen.getAllByRole('button', { name: /Documentos/i })).toHaveLength(1);
   });
+});
+
+describe('AppLayout — drills isMobile into the active content view (Story 11.3, AC2)', () => {
+  const cases = [
+    { activeScreen: 'search' as const, spy: searchViewSpy },
+    { activeScreen: 'docs' as const, spy: docsViewSpy },
+    { activeScreen: 'stats' as const, spy: statsViewSpy },
+  ];
+
+  for (const { activeScreen, spy } of cases) {
+    it(`should forward isMobile to <${activeScreen}> in both viewports`, () => {
+      spy.mockClear();
+      renderShell({ isMobile: true, activeScreen });
+      expect(spy).toHaveBeenCalled();
+      expect(spy.mock.calls[0][0].isMobile).toBe(true);
+
+      cleanup();
+      spy.mockClear();
+      renderShell({ isMobile: false, activeScreen });
+      expect(spy.mock.calls[0][0].isMobile).toBe(false);
+    });
+  }
 });
