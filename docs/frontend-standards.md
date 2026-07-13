@@ -188,7 +188,11 @@ Render `token` frames incrementally, `citation` frames as sources, close on `don
 
 ## UI/UX Standards
 
-- **Responsive** layouts; relative units; images `max-width: 100%`.
+- **Responsive** layouts; relative units; images `max-width: 100%`. Breakpoint **760px**
+  (`useIsMobile` over `window.matchMedia`): desktop shows the 236px sidebar; mobile hides it and shows
+  a fixed bottom navigation bar (respect `safe-area-inset-bottom`). The body must never scroll
+  horizontally — wide content (e.g. the Documents table) scrolls inside its own `overflow-x` container.
+  E2E visual checks run at **both** a mobile and a desktop viewport, in **both** light and dark themes.
 - **Forms**: controlled inputs; real-time validation where useful; disable submit during submission; clear state after success.
 - **Navigation**: client-side routing; `try_files … /index.html` on nginx means all non-`/api` routes resolve to the SPA.
 - **Accessibility**: semantic HTML, `aria-label` on interactive elements, keyboard navigation, alt text for images.
@@ -198,7 +202,7 @@ Render `token` frames incrementally, `citation` frames as sources, close on `don
 
 - **Component/unit** (Vitest + RTL): test behavior, not implementation; test success and error states.
 - **E2E** (Playwright): test complete user workflows — search → results, chat streaming renders tokens/citations, read-status mark-all updates counts. Prefer `data-testid` for stable selection; test both success and error/validation paths. The SPA gates on a Discord OAuth session, so the harness boots `createApp` with an **injected fake `DiscordOAuthClient`** (`opts.oauth`, same as `*.integration.test.ts`) over a seeded test DB and acquires the session cookie via the fake-OAuth callback — **no real Discord credentials, no production auth-bypass route**.
-- **Visual/CSS ACs** (fonts, box-shadow, token colors, grid templates) are verified with `getComputedStyle` in the Playwright run — jsdom cannot. Use the real token names (`--text-primary/-muted/-subtle`). The harness (`playwright.config.ts` + `tests/`) lands with Story 4.5; see `bmad-story-mandatory-steps.md` §3.4 for the mandatory flow and the explicit fallback when browser automation is unavailable.
+- **Visual/CSS ACs** (fonts, box-shadow, token colors, grid templates) are verified with `getComputedStyle` in the Playwright run — jsdom cannot. Use the real token names (`--tx/--tx4/--tx5`). The harness (`playwright.config.ts` + `tests/`) lands with Story 4.5; see `bmad-story-mandatory-steps.md` §3.4 for the mandatory flow and the explicit fallback when browser automation is unavailable.
 - Part of the verification gate: type-check + tests + build green before committing (see `bmad-story-mandatory-steps.md`).
 
 ```typescript
