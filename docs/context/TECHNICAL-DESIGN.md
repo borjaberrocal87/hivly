@@ -361,6 +361,8 @@ La Web App es una **SPA estática**. No tiene servidor Node. El build de Vite pr
 
 **Internacionalización (Épico 10):** i18n con react-i18next; recursos `es.json`/`en.json` empaquetados en el bundle (import estático, init síncrono — sin estado de carga ni FOUC). Al arrancar, la SPA consulta `GET /api/ui-config` y fija el idioma; si la llamada falla, degrada a `es`. Los códigos de error del backend (`{ error, code }`) se mapean a mensajes traducidos en el cliente (`errors.<CODE>`); el campo `error` crudo queda solo como fallback para códigos desconocidos. Fechas/números con `toLocaleString(i18n.language)`.
 
+**Responsive (Épico 11):** la SPA es responsive con un único breakpoint a 760px, resuelto en cliente vía `useIsMobile` sobre `window.matchMedia` (sin dependencia nueva, AD-3 intacto — sigue siendo un build estático). En desktop se muestra la sidebar de 236px; en móvil se oculta y aparece una barra de navegación inferior fija (con `safe-area-inset-bottom` y badge de no-leídos), el header colapsa a logo + acciones, el padding de contenido se reduce y el FAB de chat se reposiciona sobre la barra inferior. El body nunca hace scroll horizontal (el contenido ancho, como la tabla de Documentos, scrollea dentro de su propio contenedor `overflow-x`). La paleta de design tokens (`:root`/`[data-kh]`) y los estados hover/focus siguen el spec `docs/context/design/Share2Brain Web.dc.html`.
+
 **Contrato con el Backend:** todos los tipos de request y response se infieren de los Zod schemas de `@share2brain/shared/schemas`. Si el Backend cambia el shape de un endpoint y actualiza el schema, el compilador TypeScript rompe el frontend antes de que llegue a producción.
 
 ```typescript

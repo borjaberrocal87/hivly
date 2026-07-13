@@ -107,8 +107,8 @@ The agent MUST exercise endpoints itself (start the Backend if needed):
    interact, assert) — e.g. search → results, docs read-status mark-all updates counts, chat
    streaming renders tokens + citations.
 3. Assert **visual/CSS ACs** with `getComputedStyle` (fonts, box-shadow, token colors, grid
-   templates) — jsdom cannot; use the **real** token names (`--text-primary/-muted/-subtle`,
-   renamed in Story 2.1 from `--tx/--tx4/--tx5`). Capture screenshots as artifacts.
+   templates) — jsdom cannot; use the **real** token names (`--tx/--tx4/--tx5`,
+   realigned to the design's canonical names in Story 11.1). Capture screenshots as artifacts.
 4. Test error/validation paths; verify persistence (data created via UI is present and
    correct); restore any test data and the DB state.
 

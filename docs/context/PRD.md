@@ -1493,7 +1493,7 @@ SENTRY_DSN=
 | Fase | Alcance |
 |------|---------|
 | **MVP** | Discord bot que escucha canales y indexa, backfill con reconciliación por snowflake, sync de ediciones/borrados, web con búsqueda y chat (streaming), read tracking con batch processing, control de acceso por rol/canal (RBAC), configuración YAML, notificaciones (Telegram/Slack), `docker compose`, tests básicos (unit + integration) |
-| **v1** | Compactación de memoria avanzada, tools con confirmación UI, dashboard de métricas de uso, E2E tests completos, panel de admin web |
+| **v1** | Compactación de memoria avanzada, tools con confirmación UI, dashboard de métricas de uso, E2E tests completos, panel de admin web, UI responsive móvil/tablet (breakpoint 760px, sidebar↔bottom-nav — Épico 11) |
 | **Posterior** | MCP tools, OCR de imágenes, modelos locales vía Ollama, internacionalización completa (más idiomas, contenido — la i18n de la UI es/en se entrega en el Épico 10 vía react-i18next), multi-tenant |
 
 ---

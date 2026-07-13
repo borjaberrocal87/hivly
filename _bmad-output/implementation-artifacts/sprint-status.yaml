@@ -195,7 +195,49 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-06-30
-last_updated: 2026-07-13  # story 8-2 review → done (bmad-code-review, 3 layers @ Opus 4.8, + re-run #1 CONVERGED:
+last_updated: 2026-07-13  # story 11-1 re-review #2 (3rd pass, bmad-code-review): CONVERGED, 0 new findings.
+# Convergence-breaker re-verified the docs patch (both lines correct, phantom-token-free), ran tsc -p packages/web
+# (exit 0) + DocsView.test.tsx (21/21), confirmed remaining --text-* refs are only historical _bmad-output artifacts +
+# the design snapshot (out of scope). Story stays done, fully converged. Next: PR + bmad-checkpoint-preview, then 11-2.
+# || (prior) last_updated: 2026-07-13  # story 11-1 re-review #1 (bmad-code-review, identical diff, extra scrutiny): all 3 layers
+# re-confirm done — Auditor + Edge re-verified AC1-AC5/D1-D6 byte-exact, rename airtight. Widened grep BEYOND
+# packages/web → 1 NEW patch APPLIED: docs source-of-truth (frontend-standards.md:205 + bmad-story-mandatory-steps.md:110)
+# still cited the old --text-* token names post-rename (Task 6 wrongly said "no frontend-standards change") → fixed to
+# --tx/--tx4/--tx5 + corrected the Story-2.1 history note. Docs-only patch (no runtime, AD-3+AD-6 intact, no gate re-run).
+# 7 dismissed (CSS-comment "lies" = misread cascade-pattern comments; hover-blurple+focus-amber = D5 a11y convention;
+# blurple contrast = same as sibling Discord links, ratified; [data-kh=dark] redundant-but-harmless D4; ACCENT_INK
+# unused = FALSE POSITIVE still used docs.spec.ts:55/62/89; "98 refs" count imprecision = no-AC bookkeeping; comment
+# naming nit). Story stays done. Next: PR + bmad-checkpoint-preview, then bmad-create-story/dev-story 11-2.
+# || (prior) last_updated: 2026-07-13  # story 11-1 review → done (bmad-code-review): 3 adversarial layers @ Opus 4.8 (Blind /
+# Edge / Auditor). Edge Case Hunter AIRTIGHT (0 findings) — grep-verified 0 orphan --text-* across packages/web,
+# every --tx* resolves to a defined token, cascade intact (.kh-doc-link:hover base lives in class), zero rgb/baseline
+# churn, dark/light token parity, --dot-read reserved-unconsumed confirmed. Acceptance Auditor: AC1-AC5 SATISFIED +
+# D1-D6 as ratified (token block byte-identical to design; --dot-read dark #272E39/light #C7CCD4 correct). Triage:
+# 1 decision-needed (D3 doc-link hover blurple vs amber) RESOLVED by Borja → KEEP BLURPLE (design-canonical, coherent
+# w/ sibling Discord links, sanctioned allowlist hex; "not theme-aware" refuted); 0 patch; 1 defer (AC3↔AC4 wording
+# tension — spec-hygiene only, code resolution correct → deferred-work.md); 4 dismissed (hex casing deliberate per D3,
+# --dot-read D2-reserved, orphan-grep clean, dark selector D4-mandated). No code change from review (implementation
+# stands). Frontend-only, packages/web only, AD-3+AD-6 intact, no new dep. Gate was green at dev-story (lint 0 /
+# 1073 unit+web / build 5 pkgs / 28 e2e). Next: PR + bmad-checkpoint-preview, then bmad-dev-story 11-2.
+# || (prior) last_updated: 2026-07-13  # story 11-1 backlog → ready-for-dev + epic-11 backlog → in-progress (bmad-create-story):
+# web refresh of design tokens + interaction states. KEY FINDING: the design has ALWAYS used --tx/--tx2..--tx5 +
+# --dot-read (HEAD design too, same values); web's --text-primary..--text-subtle naming (Story 2.1) + missing
+# --dot-read are STANDING web deviations, not new design changes. 11.1 = rename --text-* → --tx* (98 refs across 7
+# tsx + 2 css + 2 unit assertions) + add --dot-read (#272E39/#C7CCD4, reserved/unused) + :root → :root,[data-kh=dark]
+# + ONE real interaction fix (D3: .kh-doc-link:hover amber → blurple #5865F2, matches design "Ver en Discord" link).
+# Values byte-identical → zero pixel change → existing dark-desktop visual harness stays green with ZERO baseline
+# churn (e2e specs assert rgb VALUES, --text-* only in comments; only DocsView.test.tsx's 2 name-string assertions
+# change). Decisions D1-D6 flagged for review at PR (D1 rename per epic's explicit --tx2..--tx5 list; D5 keep the
+# chat-suggestion #fff→--tx + focus-visible a11y deviations). Frontend-only, AD-3+AD-6 intact, no new dep. Story
+# file 11-1-web-refresh-design-tokens-estados-interaccion.md. Next: bmad-dev-story 11-1.
+# || (prior) last_updated: 2026-07-13  # bmad-correct-course (sprint-change-proposal-2026-07-13-responsive-refresh.md): Épico 11
+# added → backlog. Trigger: updated design Share2Brain Web.dc.html introduces a full responsive system (breakpoint
+# 760px, mobile bottom-nav, adaptive header/padding/chat, safe-area) — 0 before — + refreshed token palette +
+# hover/focus states; web impl was desktop-only (only @media = prefers-reduced-motion). Frontend-only, Moderate,
+# additive. No schema/contract/backend (AD-3 + AD-6 intact), no new dep (useIsMobile over matchMedia). New FR27.
+# 5 stories 11-1..11-5, binding seq 11-1 -> 11-2 -> (11-3, 11-4) -> 11-5. Approved by Borja incl. full re-skin +
+# E2E mobile×light/dark. Next: bmad-create-story 11-1.
+# || (prior) story 8-2 review → done (bmad-code-review, 3 layers @ Opus 4.8, + re-run #1 CONVERGED:
 # Auditor "PATCHES CLEAN" AC1–AC5/D1–D8 hold, patch #2 does NOT violate D5; Edge surfaced 1 new low — whitespace-
 # only description (guard used truthiness not trim) → FIXED: guard hardened to doc.description.trim(). Gate re-run
 # green: lint 0 / 1072 unit+web / build 5 pkgs. + re-run #2 CONVERGED: Auditor "everything holds, 0 violations";
@@ -774,6 +816,21 @@ development_status:
   10-1-shared-backend-config-ui-language-endpoint-ui-config: done
   10-2-web-react-i18next-extraccion-literales-locales-json: done
   epic-10-retrospective: optional
+
+  # ── Épico 11: Responsive & Refresh Visual del Diseño Web ────────────────────
+  # Added 2026-07-13 via bmad-correct-course (sprint-change-proposal-2026-07-13-responsive-refresh.md):
+  # the updated design Share2Brain Web.dc.html introduces a full responsive system (breakpoint 760px,
+  # mobile bottom-nav, adaptive header/padding/chat, safe-area) — 0 before — plus a refreshed design-
+  # token palette + hover/focus states. Web impl was desktop-only (only @media = prefers-reduced-motion).
+  # Frontend-only, Moderate, additive. No schema/contract/backend (AD-3 + AD-6 intact). No new dependency
+  # (useIsMobile over matchMedia). New FR27. Binding sequence: 11-1 -> 11-2 -> (11-3, 11-4) -> 11-5.
+  epic-11: in-progress
+  11-1-web-refresh-design-tokens-estados-interaccion: done
+  11-2-web-useismobile-shell-responsive-applayout-header: backlog
+  11-3-web-adaptacion-responsive-vistas-search-docs-stats: backlog
+  11-4-web-chat-widget-responsive-fab-panel: backlog
+  11-5-web-e2e-harness-visual-movil-tema-claro: backlog
+  epic-11-retrospective: optional
 
   # ── Operational backlog (post-roadmap) — no epic; see operational-backlog.md ─
   # Numbered ops-N to stay outside the epic sequence (Borja chose an explicit backlog

@@ -43,6 +43,7 @@ FR23: El sistema debe desplegarse con `docker compose up -d`, incluyendo el serv
 FR24: La Web App debe presentar una vista de Estadísticas con KPIs de conocimiento, actividad de indexado en el tiempo, volumen por canal y cobertura de lectura personal.
 FR25: Toda estadística debe limitarse a los canales accesibles del usuario (AD-12); ninguna métrica expone datos de canales que el usuario no puede leer.
 FR26: La UI web carga sus textos desde recursos JSON de traducción (i18n). El idioma se define por despliegue en `Share2Brain.config.yml` (`ui.language`, default `es`); la SPA lo resuelve en runtime vía `GET /api/ui-config` (sin auth). Cubre literales, formato de fechas/números y mapeo de códigos de error a mensajes traducidos en el cliente. Idiomas iniciales: es, en.
+FR27: La UI web es responsive: usable en móvil y tablet además de desktop. Breakpoint 760px; navegación adaptativa (sidebar en desktop, barra inferior fija en móvil con badge de no-leídos); sin scroll horizontal del body; respeta `safe-area-inset`.
 
 ### Requisitos No Funcionales
 
@@ -167,6 +168,7 @@ UX-DR24: **Estadísticas** — Vista `isStats` (3ª entrada de nav): contenedor 
 | FR24 | Épico 9 | Web App: vista Estadísticas |
 | FR25 | Épico 9 | GET /api/stats: agregaciones RBAC-scoped en-SQL |
 | FR26 | Épico 10 | i18n de la UI: `ui.language` + GET /api/ui-config + react-i18next |
+| FR27 | Épico 11 | Web App: UI responsive (breakpoint 760px, sidebar↔bottom-nav) |
 
 ## Lista de Épicos
 
@@ -1201,3 +1203,50 @@ react-i18next.
   (`errors.<CODE>`, con el `error` crudo como fallback). Guardia: con el bloque `ui` ausente,
   el gate completo (lint + unit + build + 28 e2e) queda verde **sin modificar ningún assert
   existente** (AC explícito). **Depende de 10.1.** Secuencia binding: 10.1 → 10.2.
+
+---
+
+## Épico 11: Responsive & Refresh Visual del Diseño Web
+
+**Goal:** Alinear `packages/web` con la versión actualizada de `Share2Brain Web.dc.html`: soporte
+responsive (breakpoint 760px, barra de navegación inferior en móvil, header/padding/chat adaptativos,
+`safe-area-inset`) + refresh de la paleta de design tokens y estados hover/focus sobre las vistas ya
+entregadas. Frontend-only (AD-3 intacto); sin cambios de contrato, schema ni backend (AD-6 intacto).
+
+**FRs cubiertos:** FR27 (nuevo)
+
+> Aprobado via `bmad-correct-course` (2026-07-13,
+> `_bmad-output/planning-artifacts/sprint-change-proposal-2026-07-13-responsive-refresh.md`),
+> clasificación **Moderate**. Trigger: el diseño actualizado introduce un sistema responsive completo
+> (antes 0) + una paleta de tokens refinada; la implementación web era solo-desktop (único `@media` =
+> `prefers-reduced-motion`). Realiza el estándar "Responsive layouts" (`frontend-standards.md`) que
+> hasta ahora no tenía spec que lo respaldara. Sin dependencia nueva (`useIsMobile` sobre `matchMedia`).
+> Las ACs Gherkin completas y las UX-DR nuevas se detallan al crear cada historia vía
+> `bmad-create-story`. Secuencia binding: 11.1 → 11.2 → (11.3 ∥ 11.4) → 11.5.
+
+- **Historia 11.1 · web — Refresh de design tokens y estados de interacción.** Actualizar la paleta de
+  custom properties en `global.css` (`:root`/`[data-kh]` para dark + light: nuevos `--line`,
+  `--border-hover`, `--dot-read`, escalas `--tx2…--tx5`, etc.) al spec nuevo, y los estados
+  `hover`/`focus` de los primitivos (chips, cards, botones, filas) en `components.css`. Capa
+  fundacional. Sin regresión visual desktop de las vistas existentes en ambos temas.
+- **Historia 11.2 · web — Hook `useIsMobile` + shell responsive (AppLayout + Header).** `useIsMobile`
+  sobre `window.matchMedia('(max-width: 760px)')` (listener add/remove, SSR-safe). `AppLayout`: sidebar
+  visible solo en desktop; en móvil **barra inferior fija** (62px + `safe-area-inset-bottom`, con badge
+  de documentos no-leídos). `Header`: logo hexágono en móvil; oculta stats-line + pill "indexando en
+  vivo" + nombre de usuario en móvil; `headerPad`/`contentPad` dinámicos. Depende de 11.1.
+- **Historia 11.3 · web — Adaptación responsive de las vistas (Search / Docs / Stats).** Aplicar
+  `contentPad`; DocsView con scroll horizontal contenido (`overflow-x` sobre `min-width`, no del body);
+  grids auto-fit de Stats verificados/afinados; inputs y max-width fluidos en Search; nueva paleta
+  aplicada. Usable a 360px sin scroll horizontal del body. Depende de 11.2.
+- **Historia 11.4 · web — Chat widget responsive (FAB + panel).** FAB reposicionado sobre la barra
+  inferior en móvil (`chatBottom:78px`/`chatRight:16px` vs `24/24` desktop); panel
+  `max-width:calc(100vw-32px)`, `max-height:calc(100vh-48px)`, animación `kh-pop`; el FAB no tapa la
+  bottom-nav. Depende de 11.2; paralelizable con 11.3.
+- **Historia 11.5 · web/e2e — Extender el harness visual a móvil + tema claro.** Añadir un viewport
+  móvil (≤760px, p.ej. 390×844) y una ejecución en tema **claro** además del desktop/oscuro actual;
+  baselines nuevas para login, search, docs, stats y chat en las combinaciones móvil×claro/oscuro y
+  desktop×claro. Suite verde. Depende de 11.1–11.4.
+
+> **Nota de precedente:** igual que los Épicos 8/9/10 (añadidos vía `correct-course`), este épico se
+> añade como sección detallada; el resumen «Lista de Épicos» solo cubre los épicos del roadmap original
+> (1–7) y no se amplía.
