@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Brand hexagon (see src/components/Hexagon.tsx): outer amber gradient ->
+       middle bg fill -> inner amber dot. Middle/dot sizes follow the component's
+       proportional rule (~0.55x / ~0.19x). The middle fill tracks the OS theme
+       via prefers-color-scheme (SVG favicons support media queries); dark is the
+       default, matching the app's theme fallback. -->
+  <style>
+    .bg { fill: #0E1116; }
+    @media (prefers-color-scheme: light) {
+      .bg { fill: #F4F5F7; }
+    }
+  </style>
+  <defs>
+    <linearGradient id="amber" x1="0" y1="0" x2="0.5" y2="0.87">
+      <stop offset="0" stop-color="#FFCB6B" />
+      <stop offset="1" stop-color="#F5A623" />
+    </linearGradient>
+  </defs>
+  <polygon points="16,0 48,0 64,32 48,64 16,64 0,32" fill="url(#amber)" />
+  <polygon class="bg" points="23.25,14.5 40.75,14.5 49.5,32 40.75,49.5 23.25,49.5 14.5,32" />
+  <polygon points="29,26 35,26 38,32 35,38 29,38 26,32" fill="#F5A623" />
+</svg>
