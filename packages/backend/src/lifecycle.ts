@@ -63,6 +63,9 @@ export interface GracefulShutdownDeps {
 const DEFAULT_SERVER_CLOSE_TIMEOUT_MS = 10_000;
 const REDIS_QUIT_TIMEOUT_MS = 5_000;
 const DB_END_TIMEOUT_MS = 10_000;
+// Outer bound on the tracing teardown (the adapter self-bounds too, but the port
+// contract only guarantees never-reject, not never-hang — a future adapter could).
+const TRACING_SHUTDOWN_TIMEOUT_MS = 3_000;
 
 /**
  * A SIGTERM/SIGINT handler that also exposes whether a drain is in flight, so
@@ -142,9 +145,14 @@ export function createGracefulShutdown(deps: GracefulShutdownDeps): GracefulShut
         await observability.flush();
         // Story ops-6: tear down the tracing exporter so buffered spans ship before
         // exit (a no-op under NoopLlmTracing). The port contract guarantees shutdown()
-        // never rejects, but guard anyway — like redis.quit()/db.end() above — so a
-        // misbehaving adapter can never block the exit(0) below.
-        await llmTracing.shutdown().catch(() => undefined);
+        // never rejects, but only that — so bound it with an outer race like
+        // redis.quit()/db.end() above (never-reject ≠ never-hang; a future adapter that
+        // wedges could otherwise block the exit(0) below). `.catch` neutralises a late
+        // rejection that loses the race.
+        await Promise.race([
+          llmTracing.shutdown().catch(() => undefined),
+          new Promise<void>((resolve) => setTimeout(resolve, TRACING_SHUTDOWN_TIMEOUT_MS)),
+        ]);
         exit(0);
       }
     })();

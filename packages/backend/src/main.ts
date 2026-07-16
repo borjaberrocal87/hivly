@@ -58,6 +58,16 @@ async function main(): Promise<void> {
     service: 'backend',
     provider: config.observability.tracing?.provider,
   });
+  // Story ops-6 (review): bound the crash-path tracing flush with an OUTER timeout, the
+  // same hardening the graceful drain applies to shutdown() in lifecycle.ts. The port
+  // guarantees flush() never rejects, not that it never hangs — so a future adapter whose
+  // flush wedges must not block the process.exit(1) below. `.catch` neutralises a late
+  // rejection losing the race.
+  const boundedTracingFlush = (): Promise<void> =>
+    Promise.race([
+      llmTracing.flush().catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+    ]);
   // FR21 (Story 6.4): a no-op when notifications.enabled is false/absent — every
   // service behaves exactly as before this story (AC-1).
   const notifier = createNotifier(config.notifications, logger);
@@ -83,7 +93,7 @@ async function main(): Promise<void> {
     void notifier
       .notify({ service: 'backend', message: error.message, timestamp: new Date().toISOString() })
       .finally(() => observability.flush())
-      .finally(() => llmTracing.flush())
+      .finally(() => boundedTracingFlush())
       .finally(() => process.exit(1));
   });
   process.on('unhandledRejection', (reason) => {
@@ -94,7 +104,7 @@ async function main(): Promise<void> {
     void notifier
       .notify({ service: 'backend', message: error.message, timestamp: new Date().toISOString() })
       .finally(() => observability.flush())
-      .finally(() => llmTracing.flush())
+      .finally(() => boundedTracingFlush())
       .finally(() => process.exit(1));
   });
 
