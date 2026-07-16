@@ -1,5 +1,6 @@
-# Share2Brain — full stack (AC1: exactly 7 services).
+# Share2Brain — full stack (8 services; ops-4 shipped 7, ops-6 adds phoenix).
 #   postgres, redis ─→ migrator (one-shot) ─→ bot, workers, backend ─→ nginx
+#   phoenix (LLM-trace collector, ops-6) runs alongside — internal-only, no boot dep.
 #
 # Secrets are interpolated from .env (compose auto-reads ./.env for ${VAR}
 # expansion). M-12: each service receives ONLY the vars it consumes via an
@@ -18,8 +19,10 @@
 # app service that mounts the config (backend/bot/workers) calls it. So each of
 # those services must receive every ${VAR} referenced in the config
 # (DISCORD_GUILD_ID, LLM/EMBEDDINGS/ENRICHMENT keys + base URLs, FRONTEND_URL,
-# SENTRY_DSN, SLACK_WEBHOOK_URL) even when the service itself never calls that
-# provider — otherwise loadConfig aborts. The blocks below pass that config set
+# SENTRY_DSN, PHOENIX_ENDPOINT, SLACK_WEBHOOK_URL) even when the service itself
+# never calls that provider — otherwise loadConfig aborts. This is why bot gets
+# PHOENIX_ENDPOINT (ops-6) even though it makes no LLM calls and never traces
+# (D3). The blocks below pass that config set
 # PLUS the service's own direct requireEnv/process.env reads, and nothing more.
 # migrator does NOT mount the config, so it needs only DATABASE_URL.
 #
@@ -75,6 +78,30 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── LLM-trace collector (Story ops-6, SNF-18) ────────────────────────────────
+  # Self-hosted Arize Phoenix: receives OpenTelemetry spans (model, tokens, latency,
+  # prompt/completion) from backend + workers via OTLP/HTTP protobuf on :6006. Content
+  # MAY travel in spans because this collector is compose-internal and NEVER publicly
+  # exposed (D2/SNF-18): on the `data` network ONLY, never proxied by nginx, and the
+  # host port is loopback-only for dev/tunnel access (operator reaches the UI via an
+  # SSH tunnel — same pattern as postgres/redis). Port 6006 = UI AND OTLP/HTTP
+  # collector. App services do NOT depends_on phoenix — tracing is best-effort and
+  # boot must never wait on the collector (an empty PHOENIX_ENDPOINT ⇒ Noop anyway).
+  phoenix:
+    image: arizephoenix/phoenix:18.0.0
+    mem_limit: 512m
+    environment:
+      # SQLite persistence under the mounted volume (Postgres optional via
+      # PHOENIX_SQL_DATABASE_URL — not needed for the MVP).
+      PHOENIX_WORKING_DIR: /mnt/data
+    # Dev-only host exposure, bound to loopback (same pattern as postgres/redis).
+    ports:
+      - "127.0.0.1:6006:6006"
+    volumes:
+      - phoenixdata:/mnt/data
+    networks:
+      - data
+
   # ── One-shot migrator (AD-9) ─────────────────────────────────────────────────
   migrator:
     build:
@@ -123,6 +150,11 @@ services:
       ENRICHMENT_LLM_API_KEY: ${ENRICHMENT_LLM_API_KEY}
       ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # ops-6: LLM-trace collector endpoint. Empty ⇒ NoopLlmTracing (S-5). Present on
+      # ALL config-mounting services (incl. bot, which never traces — D3) because the
+      # config references ${PHOENIX_ENDPOINT} and interpolation aborts on any unset
+      # ${VAR}. See the top-of-file NOTE.
+      PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
@@ -168,6 +200,11 @@ services:
       ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
       FRONTEND_URL: ${FRONTEND_URL}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # ops-6: LLM-trace collector endpoint. Empty ⇒ NoopLlmTracing (S-5). Present on
+      # ALL config-mounting services (incl. bot, which never traces — D3) because the
+      # config references ${PHOENIX_ENDPOINT} and interpolation aborts on any unset
+      # ${VAR}. See the top-of-file NOTE.
+      PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
@@ -209,6 +246,11 @@ services:
       ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
       FRONTEND_URL: ${FRONTEND_URL}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # ops-6: LLM-trace collector endpoint. Empty ⇒ NoopLlmTracing (S-5). Present on
+      # ALL config-mounting services (incl. bot, which never traces — D3) because the
+      # config references ${PHOENIX_ENDPOINT} and interpolation aborts on any unset
+      # ${VAR}. See the top-of-file NOTE.
+      PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
@@ -269,3 +311,5 @@ volumes:
   pgdata:
   # M-14: Redis AOF durability (also fixes the previously-missing Redis volume).
   redisdata:
+  # ops-6: Arize Phoenix trace store (SQLite under PHOENIX_WORKING_DIR).
+  phoenixdata:

@@ -131,6 +131,12 @@ ui:
 observability:
   sentry_dsn: "${SENTRY_DSN}"
   log_level: "info"     # debug | info | warn | error
+  # LLM inference tracing (Story ops-6) — a SEPARATE seam from Sentry above (Sentry
+  # keeps errors+logs; Phoenix takes LLM traces). Empty endpoint ⇒ disabled
+  # (NoopLlmTracing, S-5 feature flag). provider defaults to "phoenix".
+  tracing:
+    # provider: "phoenix"  # optional; defaults to "phoenix" (the only adapter today)
+    endpoint: "${PHOENIX_ENDPOINT}"
 
 # --- Security -----------------------------------------------------------------
 security:
