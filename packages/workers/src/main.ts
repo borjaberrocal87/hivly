@@ -15,8 +15,10 @@ import { createNotifier } from '@share2brain/shared/notifier';
 import { createObservability } from '@share2brain/shared/observability';
 import { createChatModel, createEmbeddingsModel } from '@share2brain/shared/providers';
 import { createRedisClient, type RedisClient } from '@share2brain/shared/redis';
+import { createLlmTracing } from '@share2brain/shared/tracing';
 
 import { createGuardedDispatcher } from './enrichment/ssrfGuard.js';
+import type { Embedder } from './indexer/types.js';
 import { runIndexer } from './indexer/consumer.js';
 import { runSync } from './sync/consumer.js';
 import { resolveStreamsConfig, runStreamTrimmer } from './trim/streamTrimmer.js';
@@ -96,6 +98,26 @@ async function main(): Promise<void> {
     undefined,
     observability.logSink,
   );
+  // Story ops-6: build the LlmTracing port in the AD-8 slot — right after
+  // createObservability/createLogger, before any network I/O AND before the LangChain
+  // embeddings/chat models are constructed below, so the OpenInference CallbackManager
+  // patch is in place before any model object exists. A NoopLlmTracing when
+  // observability.tracing.endpoint is empty/absent (S-5). A SEPARATE seam from the
+  // Sentry `observability` above (D1).
+  const llmTracing = createLlmTracing({
+    endpoint: config.observability.tracing?.endpoint ?? '',
+    service: 'workers',
+    provider: config.observability.tracing?.provider,
+  });
+  // Story ops-6 (review): bound the crash-path tracing flush with an OUTER timeout, the
+  // same hardening the graceful shutdown applies to shutdown() below. The port guarantees
+  // flush() never rejects, not that it never hangs — a future adapter whose flush wedges
+  // must not block the process.exit(1) in the fatal handlers.
+  const boundedTracingFlush = (): Promise<void> =>
+    Promise.race([
+      llmTracing.flush().catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+    ]);
   // FR21 (Story 6.4): a no-op when notifications.enabled is false/absent — the
   // workers process behaves exactly as before this story (AC-1).
   const notifier = createNotifier(config.notifications, logger);
@@ -117,6 +139,7 @@ async function main(): Promise<void> {
     void notifier
       .notify({ service: 'workers', message: error.message, timestamp: new Date().toISOString() })
       .finally(() => observability.flush())
+      .finally(() => boundedTracingFlush())
       .finally(() => process.exit(1));
   });
   process.on('unhandledRejection', (reason) => {
@@ -127,6 +150,7 @@ async function main(): Promise<void> {
     void notifier
       .notify({ service: 'workers', message: error.message, timestamp: new Date().toISOString() })
       .finally(() => observability.flush())
+      .finally(() => boundedTracingFlush())
       .finally(() => process.exit(1));
   });
 
@@ -191,6 +215,15 @@ async function main(): Promise<void> {
         // Story ops-4: drain the transport queue so the shutdown's tail logs ship
         // before exit (background transport; a no-op under NoopObservability).
         await observability.flush();
+        // Story ops-6: tear down the tracing exporter so buffered spans ship before
+        // exit (a no-op under NoopLlmTracing). Outer-bounded like the redis.quit/db.end
+        // above — the port only guarantees never-reject, not never-hang, so a future
+        // adapter that wedges can never block the exit below. `.catch` neutralises a late
+        // rejection losing the race.
+        await Promise.race([
+          llmTracing.shutdown().catch(() => undefined),
+          new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+        ]);
         process.exit(0);
       }
     })();
@@ -215,6 +248,20 @@ async function main(): Promise<void> {
 
   // Build the embeddings model from validated config (no network I/O until used).
   const embedder = createEmbeddingsModel(config.embeddings);
+
+  // Story ops-6 (AC9): wrap the embedder so each batch embedding shows up as a span
+  // nested under the enrichment/indexing trace. DI decorator at the composition root
+  // — ZERO edits to indexBatch.ts. Counts only in attributes (batch size), never
+  // document content (SNF-18). Injected into runIndexer/runSync in place of the raw
+  // embedder; the real Embeddings is assignable to the Embedder slice this wraps.
+  const tracedEmbedder: Embedder = {
+    embedDocuments: (texts: string[]) =>
+      llmTracing.withSpan(
+        'embeddings.embed_documents',
+        { 'embedding.batch_size': texts.length },
+        () => embedder.embedDocuments(texts),
+      ),
+  };
 
   // AC-6: the enrichment chat model and the SSRF-guarded dispatcher are built
   // ONCE here and injected through the pipeline — never a module-level
@@ -241,7 +288,7 @@ async function main(): Promise<void> {
   indexerPromise = runIndexer({
     redis,
     db,
-    embedder,
+    embedder: tracedEmbedder,
     config,
     logger,
     enrichModel,
@@ -255,7 +302,7 @@ async function main(): Promise<void> {
       redisUpdated: syncRedisUpdated,
       redisDeleted: syncRedisDeleted,
       db,
-      embedder,
+      embedder: tracedEmbedder,
       config,
       logger,
       enrichModel,

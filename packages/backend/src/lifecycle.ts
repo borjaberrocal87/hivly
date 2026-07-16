@@ -8,6 +8,7 @@
 import type { Logger } from '@share2brain/shared/logger';
 import type { Notifier } from '@share2brain/shared/notifier';
 import { NoopObservability, type Observability } from '@share2brain/shared/observability';
+import { NoopLlmTracing, type LlmTracing } from '@share2brain/shared/tracing';
 
 /** The subset of http.Server this module needs. */
 export interface ShutdownServer {
@@ -50,11 +51,21 @@ export interface GracefulShutdownDeps {
    * the real (possibly no-op) adapter.
    */
   observability?: Pick<Observability, 'flush'>;
+  /**
+   * Story ops-6: the LlmTracing port, torn down before exit so buffered spans ship
+   * (background exporter). Optional — defaults to `NoopLlmTracing`, whose `shutdown()`
+   * resolves immediately; `main.ts` injects the real (possibly no-op) adapter. A
+   * SEPARATE seam from `observability` above (D1).
+   */
+  llmTracing?: Pick<LlmTracing, 'shutdown'>;
 }
 
 const DEFAULT_SERVER_CLOSE_TIMEOUT_MS = 10_000;
 const REDIS_QUIT_TIMEOUT_MS = 5_000;
 const DB_END_TIMEOUT_MS = 10_000;
+// Outer bound on the tracing teardown (the adapter self-bounds too, but the port
+// contract only guarantees never-reject, not never-hang — a future adapter could).
+const TRACING_SHUTDOWN_TIMEOUT_MS = 3_000;
 
 /**
  * A SIGTERM/SIGINT handler that also exposes whether a drain is in flight, so
@@ -76,6 +87,7 @@ export function createGracefulShutdown(deps: GracefulShutdownDeps): GracefulShut
   const timeoutMs = deps.timeoutMs ?? DEFAULT_SERVER_CLOSE_TIMEOUT_MS;
   const exit = deps.exit ?? ((code: number) => process.exit(code));
   const observability = deps.observability ?? NoopObservability;
+  const llmTracing = deps.llmTracing ?? NoopLlmTracing;
   let shuttingDown = false;
 
   const handler = ((signal: string): void => {
@@ -131,6 +143,16 @@ export function createGracefulShutdown(deps: GracefulShutdownDeps): GracefulShut
         // Story ops-4: drain the transport queue so the shutdown's tail logs ship
         // before exit (background transport; a no-op under NoopObservability).
         await observability.flush();
+        // Story ops-6: tear down the tracing exporter so buffered spans ship before
+        // exit (a no-op under NoopLlmTracing). The port contract guarantees shutdown()
+        // never rejects, but only that — so bound it with an outer race like
+        // redis.quit()/db.end() above (never-reject ≠ never-hang; a future adapter that
+        // wedges could otherwise block the exit(0) below). `.catch` neutralises a late
+        // rejection that loses the race.
+        await Promise.race([
+          llmTracing.shutdown().catch(() => undefined),
+          new Promise<void>((resolve) => setTimeout(resolve, TRACING_SHUTDOWN_TIMEOUT_MS)),
+        ]);
         exit(0);
       }
     })();

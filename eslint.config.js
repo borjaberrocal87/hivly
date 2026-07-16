@@ -11,10 +11,22 @@ const SIBLING_IMPORT_BAN = {
   message: 'Services must not import each other (AD-2). Only @share2brain/shared is shared.',
 };
 
+// Story ops-6 (AD-2, grep-green rule): OpenTelemetry + Arize SDKs live ONLY in
+// packages/shared/src/tracing/phoenix.ts. Every service depends on the vendor-neutral
+// LlmTracing port from @share2brain/shared/tracing, never on @opentelemetry/@arizeai
+// directly — mirroring how @sentry/node is confined to the observability adapter.
+// Folded into each per-package no-restricted-imports object below (NOT a new
+// flat-config entry) for the same clobber reason as LANGCHAIN_LEGACY_BAN.
+const TRACING_VENDOR_BAN = {
+  group: ['@opentelemetry', '@opentelemetry/**', '@arizeai', '@arizeai/**'],
+  message:
+    'OpenTelemetry/Arize SDKs are banned outside packages/shared/src/tracing (AD-2): depend on the LlmTracing port from @share2brain/shared/tracing.',
+};
+
 const banSiblingServices = (self) => ({
   files: [`packages/${self}/**/*.{ts,tsx}`],
   rules: {
-    'no-restricted-imports': ['error', { patterns: [SIBLING_IMPORT_BAN] }],
+    'no-restricted-imports': ['error', { patterns: [SIBLING_IMPORT_BAN, TRACING_VENDOR_BAN] }],
   },
 });
 
@@ -31,7 +43,10 @@ const LANGCHAIN_LEGACY_BAN = {
 const banBackendLegacyImports = {
   files: ['packages/backend/**/*.{ts,tsx}'],
   rules: {
-    'no-restricted-imports': ['error', { patterns: [SIBLING_IMPORT_BAN, LANGCHAIN_LEGACY_BAN] }],
+    'no-restricted-imports': [
+      'error',
+      { patterns: [SIBLING_IMPORT_BAN, LANGCHAIN_LEGACY_BAN, TRACING_VENDOR_BAN] },
+    ],
   },
 };
 
@@ -57,6 +72,7 @@ const banNonBrowserSafeSharedInWeb = {
         // `patterns` = gitignore-style; `/db` + `/config` (and their descendants) are Node-only.
         patterns: [
           SIBLING_IMPORT_BAN,
+          TRACING_VENDOR_BAN,
           {
             group: ['@share2brain/shared/db', '@share2brain/shared/config', '@share2brain/shared/providers'],
             message: WEB_BROWSER_SAFE_MESSAGE,

@@ -7,6 +7,7 @@ import { createLogger } from '@share2brain/shared/logger';
 import { createNotifier } from '@share2brain/shared/notifier';
 import { createObservability } from '@share2brain/shared/observability';
 import { createRedisClient } from '@share2brain/shared/redis';
+import { createLlmTracing } from '@share2brain/shared/tracing';
 
 import { createApp } from './app.js';
 import { createDrizzleChannelPermissionRepository } from './infrastructure/channelPermissionRepository.drizzle.js';
@@ -45,6 +46,28 @@ async function main(): Promise<void> {
     undefined,
     observability.logSink,
   );
+  // Story ops-6: build the LlmTracing port in the AD-8 slot — right after
+  // createObservability/createLogger, before any network I/O AND before any LangChain
+  // model is constructed (createLangchainQueryEmbedder/createLangchainChatModel
+  // below), so the OpenInference CallbackManager patch is in place before any model
+  // object exists. A NoopLlmTracing when observability.tracing.endpoint is
+  // empty/absent (S-5) — no OTel object, no instrumentation, zero tracing network. A
+  // SEPARATE seam from the Sentry `observability` above (D1).
+  const llmTracing = createLlmTracing({
+    endpoint: config.observability.tracing?.endpoint ?? '',
+    service: 'backend',
+    provider: config.observability.tracing?.provider,
+  });
+  // Story ops-6 (review): bound the crash-path tracing flush with an OUTER timeout, the
+  // same hardening the graceful drain applies to shutdown() in lifecycle.ts. The port
+  // guarantees flush() never rejects, not that it never hangs — so a future adapter whose
+  // flush wedges must not block the process.exit(1) below. `.catch` neutralises a late
+  // rejection losing the race.
+  const boundedTracingFlush = (): Promise<void> =>
+    Promise.race([
+      llmTracing.flush().catch(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, 3_000)),
+    ]);
   // FR21 (Story 6.4): a no-op when notifications.enabled is false/absent — every
   // service behaves exactly as before this story (AC-1).
   const notifier = createNotifier(config.notifications, logger);
@@ -70,6 +93,7 @@ async function main(): Promise<void> {
     void notifier
       .notify({ service: 'backend', message: error.message, timestamp: new Date().toISOString() })
       .finally(() => observability.flush())
+      .finally(() => boundedTracingFlush())
       .finally(() => process.exit(1));
   });
   process.on('unhandledRejection', (reason) => {
@@ -80,6 +104,7 @@ async function main(): Promise<void> {
     void notifier
       .notify({ service: 'backend', message: error.message, timestamp: new Date().toISOString() })
       .finally(() => observability.flush())
+      .finally(() => boundedTracingFlush())
       .finally(() => process.exit(1));
   });
 
@@ -167,6 +192,9 @@ async function main(): Promise<void> {
     // Story ops-5: inject the Observability port (NFR13 user context + AC8 error
     // handler run through it). A no-op NoopObservability when the DSN is empty.
     observability,
+    // Story ops-6: inject the LlmTracing port so app.ts can wrap the query embedder
+    // + pgvector search in spans (AC9). A no-op NoopLlmTracing when tracing is off.
+    llmTracing,
     agentMemoryWindow: config.agent.memory_window,
     // Story 2.5: presence = enabled. Spread so the key is genuinely absent when
     // guest access is off (never `guestAccess: undefined`).
@@ -200,7 +228,17 @@ async function main(): Promise<void> {
   // AC-3: real bounded drain (replaces the previous stub), extracted to
   // lifecycle.ts for unit testability. Switched off redis.destroy() (no flush)
   // onto bounded redis.quit() (note #7).
-  const shutdown = createGracefulShutdown({ server, redis, db, logger, notifier, observability });
+  const shutdown = createGracefulShutdown({
+    server,
+    redis,
+    db,
+    logger,
+    notifier,
+    observability,
+    // Story ops-6: drain the tracing exporter on graceful shutdown, beside
+    // observability.flush() (a no-op under NoopLlmTracing).
+    llmTracing,
+  });
   isShuttingDown = shutdown.isShuttingDown;
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));

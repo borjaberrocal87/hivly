@@ -6,6 +6,7 @@
 import { type Database } from '@share2brain/shared/db';
 import type { Logger } from '@share2brain/shared/logger';
 import { NoopObservability, type Observability } from '@share2brain/shared/observability';
+import { NoopLlmTracing, type LlmTracing } from '@share2brain/shared/tracing';
 import cors from 'cors';
 import express, { type Express } from 'express';
 import helmet from 'helmet';
@@ -23,6 +24,7 @@ import { createSearchService } from './application/services/searchService.js';
 import { createStatsService } from './application/services/statsService.js';
 import type { ChatModel } from './domain/repositories/chatModel.js';
 import type { DiscordOAuthClient } from './domain/repositories/discordOAuthClient.js';
+import type { EmbeddingSearchRepository } from './domain/repositories/embeddingSearchRepository.js';
 import type { QueryEmbedder } from './domain/repositories/queryEmbedder.js';
 import { createHealthHandler } from './health.js';
 import { createDrizzleChannelPermissionRepository } from './infrastructure/channelPermissionRepository.drizzle.js';
@@ -136,6 +138,14 @@ export interface AppOptions {
    * `logger?`/`queryEmbedder?` injection precedent.
    */
   observability?: Observability;
+  /**
+   * LlmTracing port (Story ops-6). OPTIONAL — only `main.ts` injects the real
+   * adapter; `buildTestAppOptions` and the e2e harness omit it, so it defaults to
+   * `NoopLlmTracing` (every `withSpan` just runs `fn` — byte-identical to no tracing).
+   * Used below to wrap the query embedder + pgvector search in spans (AC9). Follows
+   * the `observability?` injection precedent; a SEPARATE seam from it (D1).
+   */
+  llmTracing?: LlmTracing;
 }
 
 /** Default logger for createApp callers that don't inject one (tests/e2e). */
@@ -154,6 +164,11 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
   // absent (tests/e2e), so setUser + the Express error handler are inert there —
   // same behavior as the empty-DSN no-op path.
   const observability = opts.observability ?? NoopObservability;
+
+  // Story ops-6: the LlmTracing port. Defaults to the no-op adapter when absent
+  // (tests/e2e), so every `withSpan` just runs its `fn` — byte-identical to tracing
+  // off. A SEPARATE seam from `observability` above (D1).
+  const llmTracing = opts.llmTracing ?? NoopLlmTracing;
 
   // AC-2 (Story 6.4): helmet mounts FIRST, before EVERYTHING — including
   // /health, so probes also carry the security headers ("cualquier request").
@@ -285,7 +300,31 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
     );
   }
   const embeddingSearch = createDrizzleEmbeddingSearchRepository(db);
-  const searchService = createSearchService({ embedder: queryEmbedder, searchRepo: embeddingSearch });
+
+  // Story ops-6 (AC9): wrap the query embedder + pgvector search so the RAG retrieve
+  // phase (embed → similarity search) shows up as spans nested under the auto-
+  // instrumented chat trace. DI decorators at the composition root — ZERO edits to
+  // queryEmbedder.langchain.ts / embeddingSearchRepository.drizzle.ts / the retriever.
+  // Attributes carry COUNTS/PARAMS ONLY — never query content, never the channel-id
+  // list itself (SNF-18/AD-12); content flows only through the OpenInference auto
+  // spans (D2). Reused by both the search endpoint and the RAG retriever below.
+  const tracedQueryEmbedder: QueryEmbedder = {
+    embedQuery: (text: string) =>
+      llmTracing.withSpan('embeddings.embed_query', {}, () => queryEmbedder.embedQuery(text)),
+  };
+  const tracedEmbeddingSearch: EmbeddingSearchRepository = {
+    searchByEmbedding: (queryVector: number[], allowedChannelIds: string[], limit: number) =>
+      llmTracing.withSpan(
+        'pgvector.similarity_search',
+        { 'db.top_k': limit, 'rbac.allowed_channels.count': allowedChannelIds.length },
+        () => embeddingSearch.searchByEmbedding(queryVector, allowedChannelIds, limit),
+      ),
+  };
+
+  const searchService = createSearchService({
+    embedder: tracedQueryEmbedder,
+    searchRepo: tracedEmbeddingSearch,
+  });
   const searchController = createSearchController({ searchService });
   app.use('/api/search', createSearchRouter(searchController));
 
@@ -328,8 +367,8 @@ export function createApp(db: Database, redis: RedisClient, opts: AppOptions): E
     );
   }
   const ragRetriever = createDrizzleRagRetriever({
-    embedder: queryEmbedder,
-    searchRepo: embeddingSearch,
+    embedder: tracedQueryEmbedder,
+    searchRepo: tracedEmbeddingSearch,
     logger: opts.logger ?? noopLogger,
   });
   const ragAgent = createRagAgent({

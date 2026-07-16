@@ -153,6 +153,48 @@ export const Share2BrainConfigSchema = z.object({
     // one factory branch + a new adapter file; NO service/web edit (AC10). Keep
     // the enum members in sync with `ObservabilityProvider` in observability.ts.
     provider: z.enum(['sentry']).default('sentry'),
+    // Story ops-6: LLM inference tracing via the SEPARATE `LlmTracing` port
+    // (D1 — NOT the Sentry seam above). The whole block is OPTIONAL and has NO
+    // `.default()` (streams/ui precedent): an absent block ⇒ consumers resolve
+    // `endpoint` to '' ⇒ `NoopLlmTracing` (S-5, the feature flag — no OTel object
+    // is ever constructed). Behavior only; the collector endpoint is a URL, not a
+    // secret, but is supplied via ${PHOENIX_ENDPOINT} so deploys vary it per env.
+    // `provider` keeps a fail-safe `phoenix` default (mirrors `provider` above);
+    // keep the enum in sync with `LlmTracingProvider` in tracing/tracing.ts.
+    // `endpoint`: empty disables (S-5); otherwise a valid URL — a typo should fail
+    // at load, not silently drop traces (mirrors `sentry_dsn`).
+    tracing: z
+      .object({
+        provider: z.enum(['phoenix']).default('phoenix'),
+        // Empty disables (S-5); otherwise an http(s) URL. `isHttpUrl` (the repo's
+        // parse-based convention, not the loose `URL.canParse` which admits any scheme):
+        // a `redis://`/`file:` endpoint would build a live-looking exporter whose export
+        // silently fails, so reject a non-http(s) scheme at load — fail loud (AD-8).
+        endpoint: z
+          .string()
+          .refine((v) => v === '' || isHttpUrl(v), {
+            message: 'observability.tracing.endpoint must be empty or a valid HTTP(S) URL',
+          })
+          // The endpoint is the collector ROOT — the adapter appends `/v1/traces`. Reject
+          // a query/fragment or an already-appended `/v1/traces` path so a pasted full OTLP
+          // URL fails loud (AD-8) instead of silently POSTing to `…/v1/traces/v1/traces`
+          // (a 404 the best-effort exporter swallows). A reverse-proxy subpath is still ok.
+          .refine(
+            (v) => {
+              // Let the first refine own the empty / non-http(s) cases (Zod runs every
+              // chained refine even after one fails, so guard against `new URL` throwing
+              // on the value that refine already rejected).
+              if (v === '' || !isHttpUrl(v)) return true;
+              const url = new URL(v);
+              return url.search === '' && url.hash === '' && !/\/v1\/traces\/?$/.test(url.pathname);
+            },
+            {
+              message:
+                'observability.tracing.endpoint must be the collector root — no query/fragment and no trailing /v1/traces (the adapter appends /v1/traces)',
+            },
+          ),
+      })
+      .optional(),
   }),
   security: z.object({
     rate_limit: z.object({

@@ -88,6 +88,12 @@ services:
       ENRICHMENT_LLM_API_KEY: ${ENRICHMENT_LLM_API_KEY}
       ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # ops-6: LLM-trace collector endpoint. REQUIRED on every config-mounting service
+      # (incl. bot) — the config references ${PHOENIX_ENDPOINT} and interpolation aborts
+      # on any unset ${VAR}. Empty ⇒ NoopLlmTracing (S-5). This standalone prod file
+      # ships no phoenix service; to enable tracing in prod, run a phoenix collector
+      # (mirror the dev compose service) or point this at an external OTLP endpoint.
+      PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
@@ -122,6 +128,12 @@ services:
       ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
       FRONTEND_URL: ${FRONTEND_URL}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # ops-6: LLM-trace collector endpoint. REQUIRED on every config-mounting service
+      # (incl. bot) — the config references ${PHOENIX_ENDPOINT} and interpolation aborts
+      # on any unset ${VAR}. Empty ⇒ NoopLlmTracing (S-5). This standalone prod file
+      # ships no phoenix service; to enable tracing in prod, run a phoenix collector
+      # (mirror the dev compose service) or point this at an external OTLP endpoint.
+      PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
@@ -154,6 +166,12 @@ services:
       ENRICHMENT_LLM_BASE_URL: ${ENRICHMENT_LLM_BASE_URL:-}
       FRONTEND_URL: ${FRONTEND_URL}
       SENTRY_DSN: ${SENTRY_DSN:-}
+      # ops-6: LLM-trace collector endpoint. REQUIRED on every config-mounting service
+      # (incl. bot) — the config references ${PHOENIX_ENDPOINT} and interpolation aborts
+      # on any unset ${VAR}. Empty ⇒ NoopLlmTracing (S-5). This standalone prod file
+      # ships no phoenix service; to enable tracing in prod, run a phoenix collector
+      # (mirror the dev compose service) or point this at an external OTLP endpoint.
+      PHOENIX_ENDPOINT: ${PHOENIX_ENDPOINT:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
