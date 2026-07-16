@@ -62,6 +62,59 @@ describe('createGracefulShutdown', () => {
     expect(calls).toEqual(['server.close', 'redis.quit', 'db.end', 'flush', 'exit']);
   });
 
+  it('shuts down the LlmTracing port after the drain and after the observability flush (ops-6)', async () => {
+    const calls: string[] = [];
+    const server: ShutdownServer = { close: (cb) => (calls.push('server.close'), cb?.()) };
+    const redis: ShutdownRedis = { quit: async () => (calls.push('redis.quit'), 'OK') };
+    const db: ShutdownDatabase = { $client: { end: async () => void calls.push('db.end') } };
+    const logger = fakeLogger();
+    const flush = vi.fn(async () => void calls.push('flush'));
+    const tracingShutdown = vi.fn(async () => void calls.push('tracing.shutdown'));
+    const exit = vi.fn(() => void calls.push('exit'));
+    const shutdown = createGracefulShutdown({
+      server,
+      redis,
+      db,
+      logger,
+      exit,
+      observability: { flush },
+      llmTracing: { shutdown: tracingShutdown },
+    });
+
+    shutdown('SIGTERM');
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
+
+    expect(tracingShutdown).toHaveBeenCalledTimes(1);
+    // Tracing teardown drains AFTER the connection drain + observability flush, and
+    // immediately BEFORE exit.
+    expect(calls).toEqual(['server.close', 'redis.quit', 'db.end', 'flush', 'tracing.shutdown', 'exit']);
+  });
+
+  it('a rejecting LlmTracing.shutdown() cannot block the exit (defensive guard, ops-6)', async () => {
+    const server: ShutdownServer = { close: (cb) => cb?.() };
+    const redis: ShutdownRedis = { quit: async () => 'OK' };
+    const db: ShutdownDatabase = { $client: { end: async () => undefined } };
+    const logger = fakeLogger();
+    // The port contract says shutdown() never rejects; prove the lifecycle survives
+    // one that does anyway (a misbehaving adapter must never wedge the exit).
+    const tracingShutdown = vi.fn().mockRejectedValue(new Error('exporter down'));
+    const exit = vi.fn();
+    const shutdown = createGracefulShutdown({
+      server,
+      redis,
+      db,
+      logger,
+      exit,
+      llmTracing: { shutdown: tracingShutdown },
+    });
+
+    shutdown('SIGTERM');
+
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0));
+    expect(tracingShutdown).toHaveBeenCalledTimes(1);
+  });
+
   it('force-closes remaining connections when the server does not close within timeoutMs', async () => {
     vi.useFakeTimers();
     const closeAllConnections = vi.fn();

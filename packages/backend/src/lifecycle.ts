@@ -8,6 +8,7 @@
 import type { Logger } from '@share2brain/shared/logger';
 import type { Notifier } from '@share2brain/shared/notifier';
 import { NoopObservability, type Observability } from '@share2brain/shared/observability';
+import { NoopLlmTracing, type LlmTracing } from '@share2brain/shared/tracing';
 
 /** The subset of http.Server this module needs. */
 export interface ShutdownServer {
@@ -50,6 +51,13 @@ export interface GracefulShutdownDeps {
    * the real (possibly no-op) adapter.
    */
   observability?: Pick<Observability, 'flush'>;
+  /**
+   * Story ops-6: the LlmTracing port, torn down before exit so buffered spans ship
+   * (background exporter). Optional — defaults to `NoopLlmTracing`, whose `shutdown()`
+   * resolves immediately; `main.ts` injects the real (possibly no-op) adapter. A
+   * SEPARATE seam from `observability` above (D1).
+   */
+  llmTracing?: Pick<LlmTracing, 'shutdown'>;
 }
 
 const DEFAULT_SERVER_CLOSE_TIMEOUT_MS = 10_000;
@@ -76,6 +84,7 @@ export function createGracefulShutdown(deps: GracefulShutdownDeps): GracefulShut
   const timeoutMs = deps.timeoutMs ?? DEFAULT_SERVER_CLOSE_TIMEOUT_MS;
   const exit = deps.exit ?? ((code: number) => process.exit(code));
   const observability = deps.observability ?? NoopObservability;
+  const llmTracing = deps.llmTracing ?? NoopLlmTracing;
   let shuttingDown = false;
 
   const handler = ((signal: string): void => {
@@ -131,6 +140,11 @@ export function createGracefulShutdown(deps: GracefulShutdownDeps): GracefulShut
         // Story ops-4: drain the transport queue so the shutdown's tail logs ship
         // before exit (background transport; a no-op under NoopObservability).
         await observability.flush();
+        // Story ops-6: tear down the tracing exporter so buffered spans ship before
+        // exit (a no-op under NoopLlmTracing). The port contract guarantees shutdown()
+        // never rejects, but guard anyway — like redis.quit()/db.end() above — so a
+        // misbehaving adapter can never block the exit(0) below.
+        await llmTracing.shutdown().catch(() => undefined);
         exit(0);
       }
     })();
